@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'home_screen.dart'; 
 
 class AuthScreen extends StatefulWidget {
   const AuthScreen({super.key});
@@ -16,19 +17,12 @@ class _AuthScreenState extends State<AuthScreen> {
   final Color sageGreen = const Color(0xFFA8B3A0);
   final Color slateGrey = const Color(0xFF8C9DA6);
 
-  void _showComingSoon(String featureName) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('Η λειτουργία "$featureName" θα είναι σύντομα διαθέσιμη! '),
-        backgroundColor: sageGreen,
-        duration: const Duration(seconds: 2),
-      ),
-    );
-  }
-
   Future<void> _login() async {
     FocusScope.of(context).unfocus(); 
-    _showComingSoon("Είσοδος Χρήστη");
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(builder: (context) => const HomeScreen()),
+    );
   }
 
   @override
@@ -92,14 +86,18 @@ class _AuthScreenState extends State<AuthScreen> {
             side: BorderSide(color: sageGreen, width: 2),
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
           ),
-          onPressed: () => _showComingSoon("Δημιουργία Λογαριασμού"),
+          onPressed: () {
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(builder: (context) => const HomeScreen()),
+            );
+          },
           child: Text('ΔΗΜΙΟΥΡΓΙΑ ΛΟΓΑΡΙΑΣΜΟΥ', style: TextStyle(color: sageGreen, fontWeight: FontWeight.bold)),
         ),
       ],
     );
   }
 
-  // Φόρμα σύνδεσης
   Widget _buildLoginForm() {
     return Column(
       key: const ValueKey('login'),
