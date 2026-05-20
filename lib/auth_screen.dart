@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'registration_screen.dart';
 import 'home_screen.dart'; 
 
 class AuthScreen extends StatefulWidget {
@@ -10,18 +13,72 @@ class AuthScreen extends StatefulWidget {
 
 class _AuthScreenState extends State<AuthScreen> {
   bool showLoginForm = false; 
-  
   final TextEditingController loginInputController = TextEditingController();
   final TextEditingController passwordController = TextEditingController();
+  bool isLoading = false;
 
   final Color sageGreen = const Color(0xFFA8B3A0);
   final Color slateGrey = const Color(0xFF8C9DA6);
 
+  // Συνάρτηση login 
   Future<void> _login() async {
-    FocusScope.of(context).unfocus(); 
-    Navigator.pushReplacement(
-      context,
-      MaterialPageRoute(builder: (context) => const HomeScreen()),
+    setState(() => isLoading = true);
+    try {
+      String input = loginInputController.text.trim();
+      String password = passwordController.text.trim();
+      String loginEmail = input;
+
+      if (input.isEmpty || password.isEmpty) {
+        throw 'Παρακαλώ συμπληρώστε όλα τα πεδία.';
+      }
+
+      // Αν δεν έχει @, ψάχνουμε το email μέσω του username στο Firestore
+      if (!input.contains('@')) {
+        var querySnapshot = await FirebaseFirestore.instance
+            .collection('users')
+            .where('username', isEqualTo: input)
+            .limit(1)
+            .get();
+
+        if (querySnapshot.docs.isEmpty) {
+          throw 'Δεν βρέθηκε χρήστης με αυτό το Username.';
+        }
+        loginEmail = querySnapshot.docs.first['email'];
+      }
+
+      // Σύνδεση στο Firebase
+      await FirebaseAuth.instance.signInWithEmailAndPassword(
+        email: loginEmail,
+        password: password,
+      );
+
+      // Αν η σύνδεση πετύχει πάμε στο HomeScreen
+      if (mounted) {
+        loginInputController.clear();
+        passwordController.clear();
+        
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (context) => const HomeScreen()),
+        );
+      }
+      // ----------------------------------------
+
+    } on FirebaseAuthException catch (e) {
+      String msg = "Σφάλμα σύνδεσης.";
+      if (e.code == 'wrong-password') msg = "Λάθος κωδικός πρόσβασης.";
+      if (e.code == 'user-not-found') msg = "Ο χρήστης δεν βρέθηκε.";
+      _showSnackBar(msg);
+    } catch (e) {
+      _showSnackBar(e.toString());
+    } finally {
+      if (mounted) setState(() => isLoading = false);
+    }
+  }
+
+  void _showSnackBar(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message), backgroundColor: Colors.redAccent),
     );
   }
 
@@ -42,6 +99,7 @@ class _AuthScreenState extends State<AuthScreen> {
     );
   }
 
+  // Οθόνη υποδοχής
   Widget _buildWelcomeScreen() {
     return Column(
       key: const ValueKey('welcome'),
@@ -87,10 +145,7 @@ class _AuthScreenState extends State<AuthScreen> {
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
           ),
           onPressed: () {
-            Navigator.pushReplacement(
-              context,
-              MaterialPageRoute(builder: (context) => const HomeScreen()),
-            );
+            Navigator.push(context, MaterialPageRoute(builder: (context) => const RegistrationScreen(initialStep: 0,)));
           },
           child: Text('ΔΗΜΙΟΥΡΓΙΑ ΛΟΓΑΡΙΑΣΜΟΥ', style: TextStyle(color: sageGreen, fontWeight: FontWeight.bold)),
         ),
@@ -98,6 +153,7 @@ class _AuthScreenState extends State<AuthScreen> {
     );
   }
 
+  // Φόρμα σύνδεσης
   Widget _buildLoginForm() {
     return Column(
       key: const ValueKey('login'),
@@ -134,10 +190,9 @@ class _AuthScreenState extends State<AuthScreen> {
           ),
         ),
         const SizedBox(height: 30),
-        ElevatedButton(
-          onPressed: _login, 
-          child: const Text('ΕΙΣΟΔΟΣ'),
-        ),
+        isLoading 
+          ? Center(child: CircularProgressIndicator(color: sageGreen))
+          : ElevatedButton(onPressed: _login, child: const Text('ΕΙΣΟΔΟΣ')),
       ],
     );
   }
