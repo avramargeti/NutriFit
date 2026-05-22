@@ -1,5 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'goals_screen.dart';
 import 'auth_screen.dart';
+import 'admin_add_ingredient_screen.dart';
+import 'ingredients_list_screen.dart';
+import 'add_recipe_screen.dart';
+import 'recipes_list_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -10,7 +17,7 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   String username = "User";
-  bool isLoadingUsername = false;
+  bool isLoadingUsername = true;
 
   final Color sageGreen = const Color(0xFFA8B3A0);
   final Color slateGrey = const Color(0xFF8C9DA6);
@@ -32,11 +39,34 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _fetchUsername() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null) {
+      try {
+        DocumentSnapshot doc = await FirebaseFirestore.instance
+            .collection('users')
+            .doc(user.uid)
+            .get();
+
+        if (mounted) {
+          setState(() {
+            if (doc.exists && doc.data() != null) {
+              username = (doc.data() as Map<String, dynamic>)['username'] ?? "User";
+            }
+            isLoadingUsername = false;
+          });
+        }
+      } catch (e) {
+        debugPrint("Σφάλμα: $e");
+        if (mounted) setState(() => isLoadingUsername = false);
+      }
+    } else {
+      if (mounted) setState(() => isLoadingUsername = false);
+    }
   }
 
   Future<void> _logout() async {
-    _showComingSoon("Αποσύνδεση Χρήστη");
-    Future.delayed(const Duration(seconds: 1), () {
+    try {
+      await FirebaseAuth.instance.signOut();
       if (mounted) {
         Navigator.pushAndRemoveUntil(
           context,
@@ -44,9 +74,12 @@ class _HomeScreenState extends State<HomeScreen> {
           (Route<dynamic> route) => false,
         );
       }
-    });
+    } catch (e) {
+      debugPrint("Σφάλμα αποσύνδεσης: $e");
+    }
   }
 
+  // Λειτουργία για το μενού των συνταγών
   void _showRecipesModal(BuildContext context) {
     showModalBottomSheet(
       context: context,
@@ -85,8 +118,13 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
               title: const Text('Αναζήτηση Συνταγών'),
               onTap: () {
-                Navigator.pop(context);
-                _showComingSoon("Λίστα Συνταγών");
+                Navigator.pop(context); 
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const RecipesListScreen(),
+                  ),
+                );
               },
             ),
             ListTile(
@@ -97,7 +135,12 @@ class _HomeScreenState extends State<HomeScreen> {
               title: const Text('Δημιουργία Νέας Συνταγής'),
               onTap: () {
                 Navigator.pop(context); 
-                _showComingSoon("Προσθήκη Συνταγής");
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const AddRecipeScreen(),
+                  ),
+                );
               },
             ),
             const SizedBox(height: 20),
@@ -109,8 +152,14 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // θεωρούμε πάντα ότι ο χρήστης είναι admin
-    const bool isAdmin = true;
+    final currentUser = FirebaseAuth.instance.currentUser;
+    final List<String> adminEmails = [
+      'avramargeti@gmail.com',
+      'bokosdimitris@gmail.com',
+      'adonopoulouifigeneia@icloud.com'
+    ];
+    final isAdmin =
+        currentUser != null && adminEmails.contains(currentUser.email);
 
     return Scaffold(
       appBar: AppBar(
@@ -177,7 +226,12 @@ class _HomeScreenState extends State<HomeScreen> {
               title: 'ΟΙ ΣΤΟΧΟΙ ΜΟΥ',
               icon: Icons.track_changes,
               color: sageGreen,
-              onTap: () => _showComingSoon("Στόχοι"),
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => const GoalsScreen()),
+                );
+              },
             ),
             const SizedBox(height: 20),
             _buildDashboardButton(
@@ -185,7 +239,14 @@ class _HomeScreenState extends State<HomeScreen> {
               title: 'ΒΙΒΛΙΟΘΗΚΗ ΥΛΙΚΩΝ',
               icon: Icons.inventory_2_outlined,
               color: slateGrey,
-              onTap: () => _showComingSoon("Βιβλιοθήκη Υλικών"),
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const IngredientsListScreen(),
+                  ),
+                );
+              },
             ),
             const SizedBox(height: 20),
             _buildDashboardButton(
@@ -196,7 +257,7 @@ class _HomeScreenState extends State<HomeScreen> {
               onTap: () => _showRecipesModal(context),
             ),
             const SizedBox(height: 20),
-
+            
             _buildDashboardButton(
               context,
               title: 'FITNESS',
@@ -246,7 +307,14 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                   elevation: 0,
                 ),
-                onPressed: () => _showComingSoon("Προσθήκη Νέου Υλικού"),
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const AdminAddIngredientScreen(),
+                    ),
+                  );
+                },
                 child: const Text('ΠΡΟΣΘΗΚΗ ΝΕΟΥ ΥΛΙΚΟΥ'),
               ),
               const SizedBox(height: 10),
