@@ -293,7 +293,7 @@ class _GoalsScreenState extends State<GoalsScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // Κάρτα BMI
+            // BMI
             Card(
               color: lightBeige, 
               elevation: 3,

@@ -5,6 +5,8 @@ import 'goals_screen.dart';
 import 'auth_screen.dart';
 import 'admin_add_ingredient_screen.dart';
 import 'ingredients_list_screen.dart';
+import 'add_recipe_screen.dart';
+import 'recipes_list_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -17,7 +19,6 @@ class _HomeScreenState extends State<HomeScreen> {
   String username = "User";
   bool isLoadingUsername = true;
 
-  // Η χρωματική παλέτα
   final Color sageGreen = const Color(0xFFA8B3A0);
   final Color slateGrey = const Color(0xFF8C9DA6);
 
@@ -27,7 +28,6 @@ class _HomeScreenState extends State<HomeScreen> {
     _fetchUsername();
   }
 
-  // Μήνυμα για τις λειτουργίες που θα είναι σύντομα διαθέσιμες
   void _showComingSoon(String featureName) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -118,8 +118,13 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
               title: const Text('Αναζήτηση Συνταγών'),
               onTap: () {
-                Navigator.pop(context); // Κλείνει το modal
-                _showComingSoon("Λίστα Συνταγών");
+                Navigator.pop(context); 
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const RecipesListScreen(),
+                  ),
+                );
               },
             ),
             ListTile(
@@ -129,8 +134,13 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
               title: const Text('Δημιουργία Νέας Συνταγής'),
               onTap: () {
-                Navigator.pop(context); // Κλείνει το modal
-                _showComingSoon("Προσθήκη Συνταγής");
+                Navigator.pop(context); 
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const AddRecipeScreen(),
+                  ),
+                );
               },
             ),
             const SizedBox(height: 20),
@@ -266,7 +276,6 @@ class _HomeScreenState extends State<HomeScreen> {
               onTap: () => _showComingSoon("Το Πλάνο Μου"),
             ),
 
-            // ---- ADMIN AREA ----
             if (isAdmin) ...[
               const SizedBox(height: 50),
               const Divider(thickness: 1),
