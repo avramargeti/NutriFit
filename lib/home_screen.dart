@@ -4,6 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'goals_screen.dart';
 import 'auth_screen.dart';
 import 'admin_add_ingredient_screen.dart';
+import 'admin_edit_ingredient_screen.dart';
 import 'ingredients_list_screen.dart';
 import 'add_recipe_screen.dart';
 import 'recipes_list_screen.dart';
@@ -263,7 +264,12 @@ class _HomeScreenState extends State<HomeScreen> {
               title: 'FITNESS',
               icon: Icons.fitness_center,
               color: slateGrey,
-              onTap: () => _showComingSoon("Προγράμματα Fitness"),
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => const FitnessScreen()),
+                );
+              }
             ),
             
             const SizedBox(height: 20),
@@ -329,7 +335,14 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                   elevation: 0,
                 ),
-                onPressed: () => _showComingSoon("Διαχείριση Προγραμμάτων Fitness"),
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const FitnessProgramsScreen(viewAll: true),
+                    ),
+                  );
+                },
                 child: const Text('ΔΙΑΧΕΙΡΙΣΗ ΠΡΟΓΡΑΜΜΑΤΩΝ FITNESS'),
               ),
             ],
