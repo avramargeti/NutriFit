@@ -3,6 +3,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'ingredients_list_screen.dart';
 import 'edit_recipe_screen.dart';
+import 'recipe_service.dart';
+import 'review_recipe.dart';
 
 class RecipesListScreen extends StatefulWidget {
   const RecipesListScreen({super.key});
@@ -357,7 +359,23 @@ void _addFridgeIngredient() async {
                                     Padding(padding: const EdgeInsets.only(top: 4.0), child: Text(missingIngredients.length == 1 ? 'Λείπει: ${missingIngredients.first}' : 'Λείπουν: ${missingIngredients.join(", ")}', style: const TextStyle(color: Colors.redAccent, fontSize: 13, fontWeight: FontWeight.bold), maxLines: 2, overflow: TextOverflow.ellipsis)),
                                 ],
                               ),
-                              trailing: const Icon(Icons.arrow_forward_ios, size: 14),
+                              trailing: Row(
+                                mainAxisSize: MainAxisSize.min, 
+                                  children: [
+                                    if (data['avgRating'] != null && (data['avgRating'] as num) > 0)
+                                      Row(
+                                        children: [
+                                          Text(
+                                            (data['avgRating'] as num).toStringAsFixed(1), 
+                                            style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.amber),
+                                          ),
+                                          const Icon(Icons.star, color: Colors.amber, size: 18),
+                                          const SizedBox(width: 8), 
+                                        ],
+                                      ),
+                                    const Icon(Icons.arrow_forward_ios, size: 14),
+                                  ],
+                                ),
                               onTap: () => _showRecipeDetails(doc.id, data),
                             ),
                           );
@@ -389,6 +407,7 @@ class _RecipeDetailsSheetState extends State<RecipeDetailsSheet> {
   late int _originalServings;
   final Color sageGreen = const Color(0xFFA8B3A0);
   final Color slateGrey = const Color(0xFF8C9DA6);
+  final RecipeService _recipeService = RecipeService();
 
   @override
   void initState() {
@@ -460,7 +479,55 @@ class _RecipeDetailsSheetState extends State<RecipeDetailsSheet> {
               const SizedBox(height: 5),
               Wrap(spacing: 6, runSpacing: -8, children: tags.map((tag) => Chip(label: Text(tag, style: const TextStyle(fontSize: 12, color: Colors.white, fontWeight: FontWeight.bold)), backgroundColor: sageGreen, padding: EdgeInsets.zero, visualDensity: VisualDensity.compact, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8), side: BorderSide.none))).toList()),
             ],
-const SizedBox(height: 20),
+            const SizedBox(height: 20),
+            Row(
+            children: [
+              Expanded(
+              child: ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: slateGrey,
+                  foregroundColor: Colors.white,
+                ),
+                onPressed: () {
+                  showDialog(
+                    context: context,
+                    builder: (dialogContext) => ReviewDialog(
+                      onUpdate: (double general, double ease, double speed, double nutrition, double cost, double clarity, String comment) async {
+                        
+                        await _recipeService.submitReview(widget.recipeId, general, ease, speed, nutrition, cost, clarity, comment);
+                        
+                        if (!context.mounted) return;
+                        
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Η αξιολόγηση αποθηκεύτηκε! ⭐')),
+                        );
+                        await _recipeService.promptAddToCookingBook(context);
+                      },
+                    ),
+                  );
+                },
+                icon: const Icon(Icons.star_outline),
+                label: const Text('ΑΞΙΟΛΟΓΗΣΗ'),
+              ),
+            ),
+              const SizedBox(width: 10), 
+
+              Expanded(
+                child: ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: sageGreen, 
+                    foregroundColor: Colors.white
+                  ),
+                  onPressed: () async {
+                    await _recipeService.promptAddToCookingBook(context);
+                  },
+                  icon: const Icon(Icons.bookmark_border), 
+                  label: const Text('COOKING BOOK'),
+                ),
+              ),
+            ],
+          ),
+            const SizedBox(height: 20),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8), decoration: BoxDecoration(color: sageGreen.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(15)),
               child: Row(
