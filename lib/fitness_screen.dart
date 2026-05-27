@@ -44,14 +44,147 @@ class _FitnessScreenState extends State<FitnessScreen> {
     }
   }
 
-  // ΠΡΟΣΘΗΚΗ: Συνάρτηση για την απευθείας προσθήκη στο πλάνο από την αρχική οθόνη
-  void _addToPlan(String programName) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('Το πρόγραμμα "$programName" προστέθηκε στο πλάνο!'), 
-        backgroundColor: sageGreen,
-        duration: const Duration(seconds: 2),
-      )
+ Future<void> _addToPlan(Map<String, dynamic> programData) async {
+    int baseCalories = programData['estimatedCalories'] ?? 0;
+    int baseDuration = 30; 
+
+    String name = programData['name']?.toString().toLowerCase() ?? '';
+    RegExp titleRegExp = RegExp(r"(\d+)\s*(?:'|λεπτά|λεπτα|min)");
+    Match? titleMatch = titleRegExp.firstMatch(name);
+
+    if (titleMatch != null) {
+      baseDuration = int.tryParse(titleMatch.group(1) ?? '30') ?? 30;
+    } else {
+      String durationStr = programData['duration']?.toString() ?? '';
+      if (durationStr == '< 30 λεπτά') {
+        baseDuration = 25; 
+      } else if (durationStr == '30-45 λεπτά') {
+        baseDuration = 40; 
+      } else if (durationStr == '> 45 λεπτά') {
+        baseDuration = 50; 
+      } else {
+        RegExp numRegExp = RegExp(r'(\d+)');
+        Match? numMatch = numRegExp.firstMatch(durationStr);
+        if (numMatch != null) {
+          baseDuration = int.tryParse(numMatch.group(1) ?? '30') ?? 30;
+        }
+      }
+    }
+
+    if (baseDuration <= 0) baseDuration = 30;
+
+    int selectedMinutes = baseDuration;
+    int calculatedCalories = baseCalories;
+
+    await showDialog(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setState) {
+            return AlertDialog(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+              title: Row(
+                children: [
+                  Icon(Icons.calendar_today, color: sageGreen),
+                  const SizedBox(width: 10),
+                  const Expanded(child: Text('Προσθήκη στο Πλάνο', style: TextStyle(fontSize: 18))),
+                ],
+              ),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Πρόγραμμα: ${programData['name']}', 
+                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)
+                  ),
+                  const SizedBox(height: 20),
+                  Text('Επίλεξε διάρκεια: $selectedMinutes λεπτά', style: TextStyle(color: slateGrey, fontWeight: FontWeight.bold)),
+                  Slider(
+                    value: selectedMinutes.toDouble(),
+                    min: 10,
+                    max: 120,
+                    divisions: 11, 
+                    activeColor: sageGreen,
+                    inactiveColor: sageGreen.withOpacity(0.3),
+                    onChanged: (val) {
+                      setState(() {
+                        selectedMinutes = val.toInt();
+                        calculatedCalories = ((baseCalories / baseDuration) * selectedMinutes).round();
+                      });
+                    },
+                  ),
+                  const SizedBox(height: 15),
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.orange.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: Colors.orange.withOpacity(0.5))
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.local_fire_department, color: Colors.orange),
+                        const SizedBox(width: 8),
+                        Text(
+                          'Θα κάψεις ~ $calculatedCalories kcal',
+                          style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.orange),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('ΑΚΥΡΩΣΗ', style: TextStyle(color: Colors.grey, fontWeight: FontWeight.bold)),
+                ),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: sageGreen,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                  onPressed: () async {
+                    final user = FirebaseAuth.instance.currentUser;
+                    if (user != null) {
+                      try {
+                        await FirebaseFirestore.instance
+                            .collection('users')
+                            .doc(user.uid)
+                            .collection('my_plan')
+                            .add({
+                          'programName': programData['name'],
+                          'category': programData['category'],
+                          'durationMinutes': selectedMinutes,
+                          'expectedCalories': calculatedCalories,
+                          'addedAt': FieldValue.serverTimestamp(),
+                          'status': 'Εκκρεμεί', 
+                        });
+                        
+                        if (mounted) {
+                          Navigator.pop(context);
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: const Text('Επιτυχής προσθήκη στο προσωπικό πλάνο!'),
+                              backgroundColor: sageGreen,
+                              behavior: SnackBarBehavior.floating,
+                            ),
+                          );
+                        }
+                      } catch (e) {
+                        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Σφάλμα αποθήκευσης: $e')));
+                      }
+                    }
+                  },
+                  child: const Text('ΕΠΙΒΕΒΑΙΩΣΗ', style: TextStyle(fontWeight: FontWeight.bold)),
+                ),
+              ],
+            );
+          },
+        );
+      },
     );
   }
 
@@ -241,7 +374,7 @@ class _FitnessScreenState extends State<FitnessScreen> {
                   const SizedBox(height: 15),
                   
                   SizedBox(
-                    height: 220, // ΑΛΛΑΓΗ: Αυξήθηκε από 180 σε 220 για να χωρέσει το κουμπί!
+                    height: 220, 
                     child: StreamBuilder<QuerySnapshot>(
                       stream: FirebaseFirestore.instance
                           .collection('fitness_programs')
@@ -329,7 +462,6 @@ class _FitnessScreenState extends State<FitnessScreen> {
             style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.redAccent, fontSize: 13),
           ),
           const SizedBox(height: 10),
-          // ΠΡΟΣΘΗΚΗ: Κουμπί "Προσθήκη" εντός της κάρτας
           SizedBox(
             width: double.infinity,
             height: 32,
@@ -341,7 +473,7 @@ class _FitnessScreenState extends State<FitnessScreen> {
                 elevation: 0,
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
               ),
-              onPressed: () => _addToPlan(data['name'] ?? 'Χωρίς Τίτλο'),
+              onPressed: () => _addToPlan(data),
               child: const Text('Προσθήκη', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
             ),
           ),
