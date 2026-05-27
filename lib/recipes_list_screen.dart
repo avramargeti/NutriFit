@@ -475,6 +475,52 @@ class _RecipeDetailsSheetState extends State<RecipeDetailsSheet> {
               ]
             ]),
             
+              // ----> ΕΔΩ ΞΕΚΙΝΑΕΙ Ο ΝΕΟΣ ΚΩΔΙΚΑΣ ΤΗΣ ΒΑΘΜΟΛΟΓΙΑΣ <----
+            const SizedBox(height: 6),
+            Builder(
+              builder: (context) {
+                List reviews = widget.data['reviews'] ?? [];
+                double avgRating = 0.0;
+                if (reviews.isNotEmpty) {
+                  double sum = reviews.fold(0, (p, e) => p + (e['rating'] as num).toDouble());
+                  avgRating = sum / reviews.length;
+                }
+
+                return InkWell(
+                  onTap: () => _recipeService.showAllReviews(context, reviews),
+                  borderRadius: BorderRadius.circular(5),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 4.0, horizontal: 2.0),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (avgRating > 0) ...[
+                          Text(
+                            avgRating.toStringAsFixed(1),
+                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.amber),
+                          ),
+                          const Icon(Icons.star, color: Colors.amber, size: 18),
+                          const SizedBox(width: 6),
+                          Text(
+                            '(${reviews.length} αξιολογήσεις)',
+                            style: TextStyle(color: Colors.grey.shade600, fontSize: 14, decoration: TextDecoration.underline),
+                          ),
+                        ] else ...[
+                          const Icon(Icons.star_border, color: Colors.grey, size: 18),
+                          const SizedBox(width: 4),
+                          const Text(
+                            'Χωρίς βαθμολογία ακόμα',
+                            style: TextStyle(color: Colors.grey, fontSize: 14, decoration: TextDecoration.underline),
+                          ),
+                        ]
+                      ],
+                    ),
+                  ),
+                );
+              }
+            ),
+            // ----> ΕΔΩ ΤΕΛΕΙΩΝΕΙ Ο ΝΕΟΣ ΚΩΔΙΚΑΣ ΤΗΣ ΒΑΘΜΟΛΟΓΙΑΣ <----
+
             if (tags.isNotEmpty) ...[
               const SizedBox(height: 5),
               Wrap(spacing: 6, runSpacing: -8, children: tags.map((tag) => Chip(label: Text(tag, style: const TextStyle(fontSize: 12, color: Colors.white, fontWeight: FontWeight.bold)), backgroundColor: sageGreen, padding: EdgeInsets.zero, visualDensity: VisualDensity.compact, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8), side: BorderSide.none))).toList()),
