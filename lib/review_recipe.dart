@@ -11,7 +11,9 @@ class ReviewDialog extends StatefulWidget {
     String comment
   ) onUpdate;
   
-  const ReviewDialog({super.key, required this.onUpdate});
+  final Map<String, dynamic>? existingReview; 
+  
+  const ReviewDialog({super.key, required this.onUpdate, this.existingReview});
 
   @override
   State<ReviewDialog> createState() => _ReviewDialogState();
@@ -28,7 +30,26 @@ class _ReviewDialogState extends State<ReviewDialog> {
   
   final TextEditingController _controller = TextEditingController();
 
-  //Συνάρτηση για τη δημιουργία κάθε αξιολόγησης(είτε υποχρεωτική είτε προαιρετική)
+  bool _isEditing = true;
+
+  @override
+  void initState() {
+    super.initState();
+    //Εναλλακτική Ροή 4
+    if (widget.existingReview != null) {
+      _isEditing = false; 
+      
+      _generalRating = (widget.existingReview!['general'] as num?)?.toDouble() ?? 0;
+      _easeRating = (widget.existingReview!['ease'] as num?)?.toDouble() ?? 0;
+      _speedRating = (widget.existingReview!['speed'] as num?)?.toDouble() ?? 0;
+      _nutritionRating = (widget.existingReview!['nutrition'] as num?)?.toDouble() ?? 0;
+      _costRating = (widget.existingReview!['cost'] as num?)?.toDouble() ?? 0;
+      _clarityRating = (widget.existingReview!['clarity'] as num?)?.toDouble() ?? 0;
+      _controller.text = widget.existingReview!['comment'] ?? '';
+    }
+  }
+
+  // Συνάρτηση για τη δημιουργία της φόρμας αξιολόγησης
   Widget _buildRatingCategory(String title, double currentRating, Function(double) onRatingChanged, {bool isMandatory = false}) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -57,9 +78,9 @@ class _ReviewDialogState extends State<ReviewDialog> {
             ),
             onPressed: () {
               if (currentRating == i + 1.0) {
-                onRatingChanged(0.0); 
+                onRatingChanged(0.0);
               } else {
-                onRatingChanged(i + 1.0); 
+                onRatingChanged(i + 1.0);
               }
             },
           )),
@@ -69,112 +90,151 @@ class _ReviewDialogState extends State<ReviewDialog> {
     );
   }
 
+  Widget _buildReadOnlyCategory(String title, double rating) {
+    if (rating == 0) return const SizedBox.shrink(); 
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6.0),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(title, style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.black87)),
+          Row(
+            children: [
+              Text(rating.toStringAsFixed(1), style: const TextStyle(fontWeight: FontWeight.bold)),
+              const Icon(Icons.star, color: Colors.amber, size: 18),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: const Text('Αξιολογήστε τη συνταγή'),
+      title: Text(
+        _isEditing 
+          ? (widget.existingReview != null ? 'Τροποποίηση Αξιολόγησης' : 'Αξιολογήστε τη συνταγή')
+          : 'Η Αξιολόγησή σας',
+        style: const TextStyle(fontWeight: FontWeight.bold),
+      ),
       content: SizedBox(
         width: double.maxFinite,
         child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              //Υποχρεωτική Κατηγορία Αξιολόγησης
-              _buildRatingCategory(
-                'Γενική Βαθμολογία', 
-                _generalRating, 
-                (rating) => setState(() {
-                  _generalRating = rating;
-                  _errorMessage = null; 
-                }),
-                isMandatory: true,
-              ),
-              if (_errorMessage != null)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 10.0),
-                  child: Text(
-                    _errorMessage!,
-                    style: const TextStyle(color: Colors.red, fontWeight: FontWeight.bold, fontSize: 13),
+          child: _isEditing 
+            ? 
+              Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _buildRatingCategory(
+                    'Γενική Βαθμολογία', 
+                    _generalRating, 
+                    (rating) => setState(() {
+                      _generalRating = rating;
+                      _errorMessage = null; 
+                    }),
+                    isMandatory: true,
                   ),
-                ),
-
-              const Divider(),
-              const SizedBox(height: 5),
-              
-              //Προαιρετικές Κατηγορίες Αξιολόγησης
-              _buildRatingCategory(
-                'Ευκολία Υλοποίησης', 
-                _easeRating, 
-                (rating) => setState(() => _easeRating = rating),
+                  
+                  if (_errorMessage != null)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 10.0),
+                      child: Text(_errorMessage!, style: const TextStyle(color: Colors.red, fontWeight: FontWeight.bold, fontSize: 13)),
+                    ),
+                    
+                  const Divider(),
+                  const SizedBox(height: 5),
+                  
+                  _buildRatingCategory('Ευκολία Υλοποίησης', _easeRating, (rating) => setState(() => _easeRating = rating)),
+                  _buildRatingCategory('Γρήγορη Εκτέλεση', _speedRating, (rating) => setState(() => _speedRating = rating)),
+                  _buildRatingCategory('Θρεπτική Αξία', _nutritionRating, (rating) => setState(() => _nutritionRating = rating)),
+                  _buildRatingCategory('Κόστος Υλικών', _costRating, (rating) => setState(() => _costRating = rating)),
+                  _buildRatingCategory('Σαφήνεια Οδηγιών', _clarityRating, (rating) => setState(() => _clarityRating = rating)),
+                  
+                  const SizedBox(height: 5),
+                  const Divider(),
+                  const SizedBox(height: 5),
+                  
+                  TextField(
+                    controller: _controller, 
+                    maxLines: 3, 
+                    decoration: const InputDecoration(
+                      hintText: 'Γράψτε τα σχόλιά σας...',
+                      border: OutlineInputBorder(),
+                      contentPadding: EdgeInsets.all(10),
+                    ),
+                  ),
+                ],
+              ):
+              Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _buildReadOnlyCategory('Γενική Βαθμολογία', _generalRating),
+                  const Divider(),
+                  _buildReadOnlyCategory('Ευκολία Υλοποίησης', _easeRating),
+                  _buildReadOnlyCategory('Γρήγορη Εκτέλεση', _speedRating),
+                  _buildReadOnlyCategory('Θρεπτική Αξία', _nutritionRating),
+                  _buildReadOnlyCategory('Κόστος Υλικών', _costRating),
+                  _buildReadOnlyCategory('Σαφήνεια Οδηγιών', _clarityRating),
+                  
+                  if (_controller.text.trim().isNotEmpty) ...[
+                    const SizedBox(height: 10),
+                    const Text('Σχόλιο:', style: TextStyle(color: Colors.grey, fontWeight: FontWeight.bold, fontSize: 12)),
+                    const SizedBox(height: 4),
+                    Container(
+                      width: double.maxFinite,
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade100,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.grey.shade300)
+                      ),
+                      child: Text(_controller.text, style: const TextStyle(fontSize: 14)),
+                    )
+                  ]
+                ],
               ),
-              _buildRatingCategory(
-                'Γρήγορη Εκτέλεση', 
-                _speedRating, 
-                (rating) => setState(() => _speedRating = rating),
-              ),
-              _buildRatingCategory(
-                'Θρεπτική Αξία', 
-                _nutritionRating, 
-                (rating) => setState(() => _nutritionRating = rating),
-              ),
-              _buildRatingCategory(
-                'Κόστος Υλικών', 
-                _costRating, 
-                (rating) => setState(() => _costRating = rating),
-              ),
-              _buildRatingCategory(
-                'Σαφήνεια Οδηγιών', 
-                _clarityRating, 
-                (rating) => setState(() => _clarityRating = rating),
-              ),
-              
-              const SizedBox(height: 5),
-              const Divider(),
-              const SizedBox(height: 5),
-              
-              TextField(
-                controller: _controller, 
-                maxLines: 3, 
-                decoration: const InputDecoration(
-                  hintText: 'Γράψτε τα σχόλιά σας...',
-                  border: OutlineInputBorder(),
-                  contentPadding: EdgeInsets.all(10),
-                ),
-              ),
-            ],
-          ),
         ),
       ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context), 
-          child: const Text('ΑΚΥΡΟ', style: TextStyle(color: Colors.grey))
-        ),
-        ElevatedButton(
-          onPressed: () {
-            if (_generalRating == 0) {
-              setState(() {
-                _errorMessage = '⚠️ Παρακαλώ συμπληρώστε τη Γενική Βαθμολογία!';
-              });
-              return;
-            }
-
-            widget.onUpdate(
-              _generalRating, 
-              _easeRating, 
-              _speedRating, 
-              _nutritionRating, 
-              _costRating, 
-              _clarityRating, 
-              _controller.text
-            );
-            
-            Navigator.pop(context);
-          },
-          child: const Text('ΥΠΟΒΟΛΗ'),
-        ),
-      ],
-    ); 
-  } 
-} 
+      actions: _isEditing 
+        ? 
+          [
+            TextButton(
+              onPressed: () {
+                if (widget.existingReview != null) {
+                  setState(() => _isEditing = false); 
+                } else {
+                  Navigator.pop(context); 
+                }
+              }, 
+              child: const Text('ΑΚΥΡΟ', style: TextStyle(color: Colors.grey))
+            ),
+            ElevatedButton(
+              onPressed: () {
+                if (_generalRating == 0) {
+                  setState(() => _errorMessage = '⚠️ Παρακαλώ συμπληρώστε τη Γενική Βαθμολογία!');
+                  return; 
+                }
+                widget.onUpdate(_generalRating, _easeRating, _speedRating, _nutritionRating, _costRating, _clarityRating, _controller.text);
+                Navigator.pop(context);
+              },
+              child: Text(widget.existingReview != null ? 'ΑΠΟΘΗΚΕΥΣΗ' : 'ΥΠΟΒΟΛΗ'),
+            ),
+          ]
+        : 
+          [
+            TextButton(
+              onPressed: () => Navigator.pop(context), 
+              child: const Text('ΚΛΕΙΣΙΜΟ', style: TextStyle(color: Colors.grey))
+            ),
+            ElevatedButton.icon(
+              icon: const Icon(Icons.edit, size: 16),
+              onPressed: () => setState(() => _isEditing = true), 
+              label: const Text('ΤΡΟΠΟΠΟΙΗΣΗ'),
+            ),
+          ],
+    );
+  }
+}

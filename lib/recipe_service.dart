@@ -103,7 +103,7 @@ class RecipeService {
       },
     );
   }
-  // 3. Εμφάνιση παραθύρου με όλες τις αξιολογήσεις (ΜΕ ΑΝΑΔΙΠΛΟΥΜΕΝΗ ΚΑΡΤΑ)
+  //Εμφάνιση όλων των αξιολογήσεων 
   Future<void> showAllReviews(BuildContext context, List reviews) async {
     final Color sageGreen = const Color(0xFFA8B3A0); 
 
@@ -145,9 +145,7 @@ class RecipeService {
                                 if (snapshot.hasData && snapshot.data!.exists) {
                                   var userData = snapshot.data!.data() as Map<String, dynamic>;
                                   username = userData['username'] ?? userData['name'] ?? 'Χρήστης';
-                                }
-                                
-                                // ---- ΝΕΑ ΔΙΑΔΡΑΣΤΙΚΗ ΚΑΡΤΑ (ΕXPANSION TILE) ----
+                                }                           
                                 return Card(
                                   margin: const EdgeInsets.only(bottom: 12),
                                   color: Colors.grey.shade50,
@@ -253,7 +251,6 @@ class RecipeService {
                                     ),
                                   ),
                                 );
-                                // -----------------------------------------------
                               },
                             );
                           },

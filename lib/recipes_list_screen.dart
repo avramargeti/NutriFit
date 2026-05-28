@@ -474,8 +474,6 @@ class _RecipeDetailsSheetState extends State<RecipeDetailsSheet> {
                 IconButton(icon: const Icon(Icons.delete_outline, color: Colors.redAccent), onPressed: _deleteRecipe),
               ]
             ]),
-            
-              // ----> ΕΔΩ ΞΕΚΙΝΑΕΙ Ο ΝΕΟΣ ΚΩΔΙΚΑΣ ΤΗΣ ΒΑΘΜΟΛΟΓΙΑΣ <----
             const SizedBox(height: 6),
             Builder(
               builder: (context) {
@@ -519,7 +517,6 @@ class _RecipeDetailsSheetState extends State<RecipeDetailsSheet> {
                 );
               }
             ),
-            // ----> ΕΔΩ ΤΕΛΕΙΩΝΕΙ Ο ΝΕΟΣ ΚΩΔΙΚΑΣ ΤΗΣ ΒΑΘΜΟΛΟΓΙΑΣ <----
 
             if (tags.isNotEmpty) ...[
               const SizedBox(height: 5),
@@ -529,33 +526,67 @@ class _RecipeDetailsSheetState extends State<RecipeDetailsSheet> {
             Row(
             children: [
               Expanded(
-              child: ElevatedButton.icon(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: slateGrey,
-                  foregroundColor: Colors.white,
+                child: ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: slateGrey,
+                    foregroundColor: Colors.white,
+                  ),
+                  onPressed: () async {
+                    final currentUser = FirebaseAuth.instance.currentUser;
+                    if (currentUser == null) return;
+
+                    showDialog(
+                      context: context,
+                      barrierDismissible: false,
+                      builder: (context) => const Center(child: CircularProgressIndicator(color: Colors.white)),
+                    );
+
+                    Map<String, dynamic>? userPreviousReview;
+
+                    try {
+                      var freshRecipeData = await FirebaseFirestore.instance.collection('recipes').doc(widget.recipeId).get();
+                      
+                      if (freshRecipeData.exists && freshRecipeData.data()!.containsKey('reviews')) {
+                        List reviews = freshRecipeData.data()!['reviews'] as List;
+                        for (var r in reviews) {
+                          if (r['userId'] == currentUser.uid) {
+                            userPreviousReview = Map<String, dynamic>.from(r as Map);
+                            break; 
+                          }
+                        }
+                      }
+                    } catch (e) {
+                      debugPrint("Σφάλμα ανάγνωσης αξιολόγησης: $e");
+                    }
+
+                    if (context.mounted) {
+                      Navigator.pop(context);
+                    }
+
+                    if (context.mounted) {
+                      showDialog(
+                        context: context,
+                        builder: (dialogContext) => ReviewDialog(
+                          existingReview: userPreviousReview, 
+                          onUpdate: (double general, double ease, double speed, double nutrition, double cost, double clarity, String comment) async {
+                            
+                            await _recipeService.submitReview(widget.recipeId, general, ease, speed, nutrition, cost, clarity, comment);
+                            
+                            if (!context.mounted) return;
+                            
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('Η αξιολόγηση αποθηκεύτηκε! ⭐')),
+                            );
+                            await _recipeService.promptAddToCookingBook(context);
+                          },
+                        ),
+                      );
+                    }
+                  },
+                  icon: const Icon(Icons.star_outline),
+                  label: const Text('ΑΞΙΟΛΟΓΗΣΗ'),
                 ),
-                onPressed: () {
-                  showDialog(
-                    context: context,
-                    builder: (dialogContext) => ReviewDialog(
-                      onUpdate: (double general, double ease, double speed, double nutrition, double cost, double clarity, String comment) async {
-                        
-                        await _recipeService.submitReview(widget.recipeId, general, ease, speed, nutrition, cost, clarity, comment);
-                        
-                        if (!context.mounted) return;
-                        
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Η αξιολόγηση αποθηκεύτηκε! ⭐')),
-                        );
-                        await _recipeService.promptAddToCookingBook(context);
-                      },
-                    ),
-                  );
-                },
-                icon: const Icon(Icons.star_outline),
-                label: const Text('ΑΞΙΟΛΟΓΗΣΗ'),
               ),
-            ),
               const SizedBox(width: 10), 
 
               Expanded(
