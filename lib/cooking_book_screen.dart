@@ -256,19 +256,45 @@ class _CookingBookScreenState extends State<CookingBookScreen> {
     );
   }
 
-  Future<void> _deleteFromCookingBook(String uid, String docId) async {
-    await FirebaseFirestore.instance
-        .collection('users')
-        .doc(uid)
-        .collection('cookingBook')
-        .doc(docId)
-        .delete();
-        
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Αφαιρέθηκε από το Cooking Book! 🗑️')),
-      );
-    }
+ Future<void> _deleteFromCookingBook(String uid, String docId) async {
+    showDialog(
+      context: context,
+      builder: (BuildContext dialogContext) {
+        return AlertDialog(
+          title: const Text('Αφαίρεση Συνταγής', style: TextStyle(fontWeight: FontWeight.bold)),
+          content: const Text('Είστε σίγουροι ότι θέλετε να αφαιρέσετε αυτή τη συνταγή από το προσωπικό σας βιβλίο;'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext), // Ακύρωση
+              child: const Text('ΟΧΙ', style: TextStyle(color: Colors.grey)),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
+              onPressed: () async {
+                Navigator.pop(dialogContext); 
+
+                await FirebaseFirestore.instance
+                    .collection('users')
+                    .doc(uid)
+                    .collection('cookingBook')
+                    .doc(docId)
+                    .delete();
+                    
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Αφαιρέθηκε από το Cooking Book! 🗑️'),
+                      backgroundColor: Colors.redAccent,
+                    ),
+                  );
+                }
+              },
+              child: const Text('ΝΑΙ', style: TextStyle(color: Colors.white)),
+            ),
+          ],
+        );
+      },
+    );
   }
 
   void _openRecipeDetails(String recipeId, Map<String, dynamic> data) {

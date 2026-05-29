@@ -66,43 +66,6 @@ class RecipeService {
     });
   }
 
-  Future<void> promptAddToCookingBook(BuildContext context) async {
-    final Color sageGreen = const Color(0xFFA8B3A0); 
-
-    await showDialog(
-      context: context,
-      builder: (BuildContext dialogContext) {
-        return AlertDialog(
-          title: const Text('Cooking Book'),
-          content: const Text('Επιθυμείτε την προσθήκη της συνταγής στο προσωπικό βιβλίο συνταγών σας;'),
-          actions: [
-            TextButton(
-              onPressed: () {
-                Navigator.pop(dialogContext); 
-              },
-              child: const Text('ΟΧΙ', style: TextStyle(color: Colors.grey)),
-            ),
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(backgroundColor: sageGreen),
-              onPressed: () {
-                Navigator.pop(dialogContext); 
-                
-                if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Σύντομα διαθέσιμο! 🚧'),
-                      backgroundColor: Colors.orange, 
-                    ),
-                  );
-                }
-              },
-              child: const Text('ΝΑΙ', style: TextStyle(color: Colors.white)),
-            ),
-          ],
-        );
-      },
-    );
-  }
   //Εμφάνιση όλων των αξιολογήσεων 
   Future<void> showAllReviews(BuildContext context, List reviews) async {
     final Color sageGreen = const Color(0xFFA8B3A0); 

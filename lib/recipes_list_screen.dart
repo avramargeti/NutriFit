@@ -5,6 +5,7 @@ import 'ingredients_list_screen.dart';
 import 'edit_recipe_screen.dart';
 import 'recipe_service.dart';
 import 'review_recipe.dart';
+import 'cooking_book_service.dart';
 
 class RecipesListScreen extends StatefulWidget {
   const RecipesListScreen({super.key});
@@ -409,6 +410,9 @@ class _RecipeDetailsSheetState extends State<RecipeDetailsSheet> {
   final Color slateGrey = const Color(0xFF8C9DA6);
   final RecipeService _recipeService = RecipeService();
 
+  final CookingBookService _cookingBookService = CookingBookService();
+
+
   @override
   void initState() {
     super.initState();
@@ -524,8 +528,8 @@ class _RecipeDetailsSheetState extends State<RecipeDetailsSheet> {
             ],
             const SizedBox(height: 20),
             Row(
-            children: [
-              Expanded(
+              children: [
+                Expanded(
                 child: ElevatedButton.icon(
                   style: ElevatedButton.styleFrom(
                     backgroundColor: slateGrey,
@@ -565,8 +569,8 @@ class _RecipeDetailsSheetState extends State<RecipeDetailsSheet> {
 
                     if (context.mounted) {
                       showDialog(
-                        context: context,
-                        builder: (dialogContext) => ReviewDialog(
+                        context: context, 
+                        builder: (dialogContext) => ReviewDialog( 
                           existingReview: userPreviousReview, 
                           onUpdate: (double general, double ease, double speed, double nutrition, double cost, double clarity, String comment) async {
                             
@@ -577,7 +581,8 @@ class _RecipeDetailsSheetState extends State<RecipeDetailsSheet> {
                             ScaffoldMessenger.of(context).showSnackBar(
                               const SnackBar(content: Text('Η αξιολόγηση αποθηκεύτηκε! ⭐')),
                             );
-                            await _recipeService.promptAddToCookingBook(context);
+
+                            await _cookingBookService.promptAddToCookingBook(context, widget.recipeId, widget.data);
                           },
                         ),
                       );
@@ -587,24 +592,78 @@ class _RecipeDetailsSheetState extends State<RecipeDetailsSheet> {
                   label: const Text('ΑΞΙΟΛΟΓΗΣΗ'),
                 ),
               ),
-              const SizedBox(width: 10), 
+              const SizedBox(width: 10),
+                Expanded(
+                  child: StreamBuilder<DocumentSnapshot>(
+                    stream: FirebaseAuth.instance.currentUser != null
+                        ? FirebaseFirestore.instance
+                            .collection('users')
+                            .doc(FirebaseAuth.instance.currentUser!.uid)
+                            .collection('cookingBook')
+                            .doc(widget.recipeId)
+                            .snapshots()
+                        : null,
+                    builder: (context, snapshot) {
+                      bool isSaved = snapshot.hasData && snapshot.data!.exists;
 
-              Expanded(
-                child: ElevatedButton.icon(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: sageGreen, 
-                    foregroundColor: Colors.white
+                      return ElevatedButton.icon(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: sageGreen,
+                          foregroundColor: Colors.white,
+                        ),
+                        onPressed: () async {
+                          if (isSaved) {
+                            showDialog(
+                              context: context,
+                              builder: (BuildContext dialogContext) {
+                                return AlertDialog(
+                                  title: const Text('Αφαίρεση Συνταγής', style: TextStyle(fontWeight: FontWeight.bold)),
+                                  content: const Text('Είστε σίγουροι ότι θέλετε να αφαιρέσετε αυτή τη συνταγή από το Cooking Book;'),
+                                  actions: [
+                                    TextButton(
+                                      onPressed: () => Navigator.pop(dialogContext), 
+                                      child: const Text('ΟΧΙ', style: TextStyle(color: Colors.grey)),
+                                    ),
+                                    ElevatedButton(
+                                      style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
+                                      onPressed: () async {
+                                        Navigator.pop(dialogContext); 
+                                        
+                                        await FirebaseFirestore.instance
+                                            .collection('users')
+                                            .doc(FirebaseAuth.instance.currentUser!.uid)
+                                            .collection('cookingBook')
+                                            .doc(widget.recipeId)
+                                            .delete();
+                                            
+                                        if (context.mounted) {
+                                          ScaffoldMessenger.of(context).showSnackBar(
+                                            const SnackBar(
+                                              content: Text("Αφαιρέθηκε από το Cooking Book! 🗑️"),
+                                              backgroundColor: Colors.redAccent,
+                                            ),
+                                          );
+                                        }
+                                      },
+                                      child: const Text('ΝΑΙ', style: TextStyle(color: Colors.white)),
+                                    ),
+                                  ],
+                                );
+                              },
+                            );
+                          } else {
+                            _cookingBookService.showCategorySelection(context, widget.recipeId, widget.data);
+                          }
+                        },
+                        icon: Icon(isSaved ? Icons.bookmark : Icons.bookmark_border),
+                        label: const Text('COOKING BOOK'),
+                      );
+                    },
                   ),
-                  onPressed: () async {
-                    await _recipeService.promptAddToCookingBook(context);
-                  },
-                  icon: const Icon(Icons.bookmark_border), 
-                  label: const Text('COOKING BOOK'),
                 ),
-              ),
-            ],
-          ),
-            const SizedBox(height: 20),
+              ],
+            ),
+            const Divider(height: 40),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8), decoration: BoxDecoration(color: sageGreen.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(15)),
               child: Row(
