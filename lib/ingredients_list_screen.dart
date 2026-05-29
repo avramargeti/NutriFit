@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'admin_edit_ingredient_screen.dart';
+import 'recipes_list_screen.dart';
 
 class IngredientsListScreen extends StatefulWidget {
   final bool isSelectionMode;
@@ -22,16 +23,6 @@ class _IngredientsListScreenState extends State<IngredientsListScreen> {
 
   final Color sageGreen = const Color(0xFFA8B3A0);
   final Color slateGrey = const Color(0xFF8C9DA6);
-
-  String _removeAccents(String text) {
-    String normalized = text.toLowerCase();
-    const withAccents = 'άέήίϊΐόύϋΰώ';
-    const withoutAccents = 'αεηιιιουυυω';
-    for (int i = 0; i < withAccents.length; i++) {
-      normalized = normalized.replaceAll(withAccents[i], withoutAccents[i]);
-    }
-    return normalized;
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -62,7 +53,7 @@ class _IngredientsListScreenState extends State<IngredientsListScreen> {
                 fillColor: Colors.white,
                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(15), borderSide: BorderSide.none),
               ),
-              onChanged: (value) => setState(() => searchQuery = _removeAccents(value)),
+              onChanged: (value) => setState(() => searchQuery = removeAccents(value)),
             ),
           ),
 
@@ -103,7 +94,7 @@ class _IngredientsListScreenState extends State<IngredientsListScreen> {
                 final filteredDocs = snapshot.data!.docs.where((doc) {
                   final data = doc.data() as Map<String, dynamic>;
                   final rawName = data['name'].toString();
-                  final searchName = _removeAccents(rawName);
+                  final searchName = removeAccents(rawName);
                   final category = data['category'] ?? "Λοιπά";
                   
                   return searchName.contains(searchQuery) && (selectedCategory == "Όλα" || category == selectedCategory);

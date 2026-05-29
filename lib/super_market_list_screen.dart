@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'ingredients_list_screen.dart';
+import 'recipes_list_screen.dart';
 
 class SuperMarketListScreen extends StatefulWidget {
   const SuperMarketListScreen({super.key});
@@ -11,13 +12,11 @@ class SuperMarketListScreen extends StatefulWidget {
 }
 
 class _SuperMarketListScreenState extends State<SuperMarketListScreen> {
-  // Ίδια χρωματική παλέτα για ομοιομορφία
   final Color sageGreen = const Color(0xFFA8B3A0);
   final Color slateGrey = const Color(0xFF8C9DA6);
 
   User? get currentUser => FirebaseAuth.instance.currentUser;
 
-  // 1. Αλλαγή κατάστασης (τικ / ξε-τίκ)
   Future<void> _toggleItem(String docId, bool currentVal) async {
     if (currentUser == null) return;
     await FirebaseFirestore.instance
@@ -28,7 +27,6 @@ class _SuperMarketListScreenState extends State<SuperMarketListScreen> {
         .update({'isChecked': !currentVal});
   }
 
-  // 2. Οριστική διαγραφή υλικού
   Future<void> _deleteItem(String docId) async {
     if (currentUser == null) return;
     await FirebaseFirestore.instance
@@ -39,20 +37,108 @@ class _SuperMarketListScreenState extends State<SuperMarketListScreen> {
         .delete();
   }
 
-  // 3A. Προσθήκη Custom Προϊόντος (Χειροκίνητα)
+  void _showEditItemDialog(String docId, String currentName, String currentQuantity, int currentAmount) {
+    final TextEditingController nameController = TextEditingController(text: currentName);
+    
+    // Αν δεν έχει quantity από χρήστη αλλά έχει amount από συνταγή βάλτο ως αρχικό κείμενο
+    String initialQty = currentQuantity.isNotEmpty 
+        ? currentQuantity 
+        : (currentAmount > 0 ? '${currentAmount}g' : '');
+    final TextEditingController qtyController = TextEditingController(text: initialQty);
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Επεξεργασία Προϊόντος'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: nameController,
+              decoration: const InputDecoration(labelText: 'Όνομα προϊόντος', border: OutlineInputBorder()),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: qtyController,
+              decoration: const InputDecoration(labelText: 'Ποσότητα (Προαιρετικό)', border: OutlineInputBorder()),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('ΑΚΥΡΟ', style: TextStyle(color: Colors.grey))),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: sageGreen),
+            onPressed: () async {
+              String newName = nameController.text.trim();
+              String newQty = qtyController.text.trim();
+              if (newName.isEmpty || currentUser == null) return;
+
+              String newDocId = removeAccents(newName);
+
+              final collectionRef = FirebaseFirestore.instance
+                  .collection('users')
+                  .doc(currentUser!.uid)
+                  .collection('shoppingList');
+
+              if (newDocId == docId) {
+                // Αν δεν άλλαξε το όνομα κάνουμε απλό update
+                await collectionRef.doc(docId).update({
+                  'quantity': newQty,
+                  'amount': 0, // Μηδενίζουμε το amount της συνταγής ώστε να φαίνεται μόνο το νέο quantity
+                });
+              } else {
+                // Αν άλλαξε το όνομα φτιάχνουμε νέο αρχείο και σβήνουμε το παλιό
+                final oldDoc = await collectionRef.doc(docId).get();
+                bool isChecked = oldDoc.exists ? (oldDoc.data()?['isChecked'] ?? false) : false;
+                
+                await collectionRef.doc(newDocId).set({
+                  'name': newName,
+                  'amount': 0, 
+                  'quantity': newQty,
+                  'isChecked': isChecked,
+                  'addedAt': FieldValue.serverTimestamp(),
+                });
+                await collectionRef.doc(docId).delete();
+              }
+              if (mounted) Navigator.pop(context);
+            },
+            child: const Text('ΑΠΟΘΗΚΕΥΣΗ', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Προσθήκη Custom Προϊόντος
   void _showAddCustomItemDialog() {
     final TextEditingController nameController = TextEditingController();
+    final TextEditingController qtyController = TextEditingController();
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Νέο Προϊόν'),
-        content: TextField(
-          controller: nameController,
-          decoration: const InputDecoration(
-            hintText: 'π.χ. Χαρτί Κουζίνας',
-            border: OutlineInputBorder(),
-          ),
-          autofocus: true,
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: nameController,
+              decoration: const InputDecoration(
+                labelText: 'Όνομα προϊόντος *',
+                hintText: 'π.χ. Χαρτί Κουζίνας',
+                border: OutlineInputBorder(),
+              ),
+              autofocus: true,
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: qtyController,
+              decoration: const InputDecoration(
+                labelText: 'Ποσότητα (Προαιρετικό)',
+                hintText: 'π.χ. 2 ρολά, 500g',
+                border: OutlineInputBorder(),
+              ),
+            ),
+          ],
         ),
         actions: [
           TextButton(
@@ -63,15 +149,50 @@ class _SuperMarketListScreenState extends State<SuperMarketListScreen> {
             style: ElevatedButton.styleFrom(backgroundColor: sageGreen),
             onPressed: () async {
               String name = nameController.text.trim();
+              String qty = qtyController.text.trim();
               if (name.isNotEmpty && currentUser != null) {
-                await FirebaseFirestore.instance
+
+                String normalizedId = removeAccents(name);
+
+                final docRef = FirebaseFirestore.instance
                     .collection('users')
                     .doc(currentUser!.uid)
                     .collection('shoppingList')
-                    .doc(name) // Το όνομα γίνεται το ID
-                    .set({
+                    .doc(normalizedId);
+
+                final docSnapshot = await docRef.get();
+                if (docSnapshot.exists) {
+                  if (mounted) {
+                    Navigator.pop(context);
+                    
+                    showDialog(
+                      context: context,
+                      builder: (context) => AlertDialog(
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+                        title: const Row(
+                          children: [
+                            Icon(Icons.info_outline, color: Colors.blueAccent),
+                            SizedBox(width: 8),
+                            Text('Ενημέρωση'),
+                          ],
+                        ),
+                        content: const Text('Το προϊόν υπάρχει ήδη στη λίστα σας!'),
+                        actions: [
+                          TextButton(
+                            onPressed: () => Navigator.pop(context),
+                            child: const Text('ΟΚ', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.blueAccent)),
+                          ),
+                        ],
+                      ),
+                    );
+                  }
+                  return;
+                }
+
+                await docRef.set({
                   'name': name,
-                  'amount': 0, // 0 σημαίνει ότι δεν έχει συγκεκριμένη ποσότητα
+                  'amount': 0, 
+                  'quantity': qty, 
                   'isChecked': false,
                   'addedAt': FieldValue.serverTimestamp(),
                 });
@@ -85,7 +206,87 @@ class _SuperMarketListScreenState extends State<SuperMarketListScreen> {
     );
   }
 
-  // 3Β. Προσθήκη Προϊόντος από τη Βιβλιοθήκη (επαναχρησιμοποίηση Components)
+  Future<void> _showQuantityForLibraryItem(String ingName) async {
+    final TextEditingController qtyController = TextEditingController();
+    await showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Ποσότητα για: $ingName'),
+        content: TextField(
+          controller: qtyController,
+          decoration: const InputDecoration(
+            labelText: 'Ποσότητα (Προαιρετικό)',
+            hintText: 'π.χ. 2 τεμάχια, 1kg',
+            border: OutlineInputBorder(),
+          ),
+          autofocus: true,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('ΑΚΥΡΟ', style: TextStyle(color: Colors.grey)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: sageGreen),
+            onPressed: () async {
+              String qty = qtyController.text.trim();
+              if (currentUser != null) {
+
+                String normalizedId = removeAccents(ingName);
+                
+                final docRef = FirebaseFirestore.instance
+                    .collection('users')
+                    .doc(currentUser!.uid)
+                    .collection('shoppingList')
+                    .doc(normalizedId);
+
+                final docSnapshot = await docRef.get();
+                if (docSnapshot.exists) {
+                  if (mounted) {
+                    Navigator.pop(context);
+                    
+                    showDialog(
+                      context: context,
+                      builder: (context) => AlertDialog(
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+                        title: const Row(
+                          children: [
+                            Icon(Icons.info_outline, color: Colors.blueAccent),
+                            SizedBox(width: 8),
+                            Text('Ενημέρωση'),
+                          ],
+                        ),
+                        content: const Text('Το προϊόν υπάρχει ήδη στη λίστα σας!'),
+                        actions: [
+                          TextButton(
+                            onPressed: () => Navigator.pop(context),
+                            child: const Text('ΟΚ', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.blueAccent)),
+                          ),
+                        ],
+                      ),
+                    );
+                  }
+                  return; 
+                }
+
+                await docRef.set({
+                  'name': ingName,
+                  'amount': 0,
+                  'quantity': qty, 
+                  'isChecked': false,
+                  'addedAt': FieldValue.serverTimestamp(),
+                });
+              }
+              if (mounted) Navigator.pop(context);
+            },
+            child: const Text('ΠΡΟΣΘΗΚΗ', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+  }
+  
+  // Προσθήκη Προϊόντος από τη Βιβλιοθήκη
   Future<void> _addItemFromLibrary() async {
     final selectedIngredientData = await Navigator.push(
       context,
@@ -97,23 +298,60 @@ class _SuperMarketListScreenState extends State<SuperMarketListScreen> {
     if (selectedIngredientData != null && selectedIngredientData is Map<String, dynamic>) {
       String ingName = selectedIngredientData['name'];
       
-      if (currentUser != null) {
-        await FirebaseFirestore.instance
-            .collection('users')
-            .doc(currentUser!.uid)
-            .collection('shoppingList')
-            .doc(ingName)
-            .set({
-          'name': ingName,
-          'amount': 0,
-          'isChecked': false,
-          'addedAt': FieldValue.serverTimestamp(),
-        });
+      if (mounted) {
+        await _showQuantityForLibraryItem(ingName);
       }
     }
   }
 
-  // 4. Μενού Επιλογής (Bottom Sheet) για τον τρόπο προσθήκης
+  Future<void> _clearAllItems() async {
+    if (currentUser == null) return;
+
+    bool? confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.warning_amber_rounded, color: Colors.redAccent),
+            SizedBox(width: 8),
+            Text('Εκκαθάριση Λίστας'),
+          ],
+        ),
+        content: const Text('Είστε σίγουροι ότι θέλετε να αδειάσετε τη λίστα αγορών σας;'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('ΑΚΥΡΟ', style: TextStyle(color: Colors.grey)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('ΕΚΚΑΘΑΡΙΣΗ', style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      final batch = FirebaseFirestore.instance.batch();
+      final collectionRef = FirebaseFirestore.instance
+          .collection('users')
+          .doc(currentUser!.uid)
+          .collection('shoppingList');
+
+      final snapshots = await collectionRef.get();
+      for (var doc in snapshots.docs) {
+        batch.delete(doc.reference);
+      }
+      await batch.commit();
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Η λίστα αγορών εκκαθαρίστηκε επιτυχώς.')),
+        );
+      }
+    }
+  }
+
   void _showAddOptions() {
     showModalBottomSheet(
       context: context,
@@ -168,6 +406,13 @@ class _SuperMarketListScreenState extends State<SuperMarketListScreen> {
         title: const Text('Λίστα Αγορών', style: TextStyle(color: Colors.white)),
         backgroundColor: sageGreen,
         iconTheme: const IconThemeData(color: Colors.white),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.delete_sweep),
+            tooltip: 'Εκκαθάριση όλων',
+            onPressed: _clearAllItems,
+          ),
+        ],
       ),
       body: StreamBuilder<QuerySnapshot>(
         stream: FirebaseFirestore.instance
@@ -189,7 +434,7 @@ class _SuperMarketListScreenState extends State<SuperMarketListScreen> {
                   Icon(Icons.shopping_cart_outlined, size: 80, color: Colors.grey[300]),
                   const SizedBox(height: 16),
                   const Text(
-                    'Η λίστα σας είναι άδεια.\nΠροσθέστε υλικά από τις συνταγές!',
+                    'Η λίστα σας είναι άδεια.\nΠροσθέστε προϊόντα!',
                     textAlign: TextAlign.center,
                     style: TextStyle(fontSize: 16, color: Colors.grey),
                   ),
@@ -198,7 +443,6 @@ class _SuperMarketListScreenState extends State<SuperMarketListScreen> {
             );
           }
 
-          // Έξυπνη ταξινόμηση: Τα επιλεγμένα (checked) πάνε στο τέλος της λίστας
           final sortedItems = items.toList()..sort((a, b) {
             bool aChecked = (a.data() as Map<String, dynamic>)['isChecked'] ?? false;
             bool bChecked = (b.data() as Map<String, dynamic>)['isChecked'] ?? false;
@@ -207,7 +451,7 @@ class _SuperMarketListScreenState extends State<SuperMarketListScreen> {
           });
 
           return ListView.builder(
-            padding: const EdgeInsets.only(bottom: 80), // Χώρος για το Floating Button
+            padding: const EdgeInsets.only(bottom: 80),
             itemCount: sortedItems.length,
             itemBuilder: (context, index) {
               final doc = sortedItems[index];
@@ -215,7 +459,15 @@ class _SuperMarketListScreenState extends State<SuperMarketListScreen> {
               final String docId = doc.id;
               final String name = data['name'] ?? '';
               final int amount = data['amount'] ?? 0;
+              final String quantity = data['quantity'] ?? '';
               final bool isChecked = data['isChecked'] ?? false;
+
+              String displaySuffix = '';
+              if (quantity.isNotEmpty) {
+                displaySuffix = ' ($quantity)';
+              } else if (amount > 0) {
+                displaySuffix = ' (${amount}g)';
+              }
 
               return Card(
                 margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
@@ -223,6 +475,7 @@ class _SuperMarketListScreenState extends State<SuperMarketListScreen> {
                 color: isChecked ? Colors.grey.shade200 : Colors.white,
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                 child: ListTile(
+                  onTap: () => _showEditItemDialog(docId, name, quantity, amount),
                   leading: Checkbox(
                     value: isChecked,
                     activeColor: sageGreen,
@@ -230,7 +483,7 @@ class _SuperMarketListScreenState extends State<SuperMarketListScreen> {
                     onChanged: (val) => _toggleItem(docId, isChecked),
                   ),
                   title: Text(
-                    amount > 0 ? '$name (${amount}g)' : name,
+                    '$name$displaySuffix',
                     style: TextStyle(
                       fontSize: 16,
                       fontWeight: isChecked ? FontWeight.normal : FontWeight.bold,

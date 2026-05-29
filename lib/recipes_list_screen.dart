@@ -40,16 +40,6 @@ class _RecipesListScreenState extends State<RecipesListScreen> {
     _loadUserAllergies(); 
   }
 
-  String _removeAccents(String text) {
-    String normalized = text.toLowerCase();
-    const withAccents = 'άέήίϊΐόύϋΰώ';
-    const withoutAccents = 'αεηιιιουυυω';
-    for (int i = 0; i < withAccents.length; i++) {
-      normalized = normalized.replaceAll(withAccents[i], withoutAccents[i]);
-    }
-    return normalized;
-  }
-
   Future<void> _loadUserAllergies() async {
     final user = FirebaseAuth.instance.currentUser;
     if (user != null) {
@@ -213,7 +203,7 @@ void _addFridgeIngredient() async {
             padding: const EdgeInsets.all(12.0),
             child: TextField(
               decoration: InputDecoration(hintText: "Αναζήτηση συνταγής...", prefixIcon: const Icon(Icons.search), border: OutlineInputBorder(borderRadius: BorderRadius.circular(15))),
-              onChanged: (val) => setState(() => searchQuery = _removeAccents(val)),
+              onChanged: (val) => setState(() => searchQuery = removeAccents(val)),
             ),
           ),
           
@@ -266,7 +256,7 @@ void _addFridgeIngredient() async {
                   var data = doc.data() as Map<String, dynamic>;
 
                   String rawTitle = (data['title'] ?? '').toString();
-                  String searchTitle = _removeAccents(rawTitle);
+                  String searchTitle = removeAccents(rawTitle);
                   
                   List<String> recipeCats = [];
                   if (data['categories'] != null) {
@@ -413,16 +403,76 @@ class _RecipeDetailsSheetState extends State<RecipeDetailsSheet> {
           .collection('shoppingList');
 
       for (var ing in ingredientsList) {
-        int displayAmount = ((ing['amount'] as num) * multiplier).round();
+        int newAmount = ((ing['amount'] as num) * multiplier).round();
         String ingredientName = ing['name'];
 
-        // Χρησιμοποιούμε το όνομα του υλικού ως ID για να μην υπάρχουν διπλότυπα
-        await shoppingListRef.doc(ingredientName).set({
-          'name': ingredientName,
-          'amount': displayAmount,
-          'isChecked': false,
-          'addedAt': FieldValue.serverTimestamp(),
-        });
+        String normalizedId = removeAccents(ingredientName);
+
+        // Έλεγχος αν το υλικό υπάρχει ήδη στη λίστα
+        final docSnapshot = await shoppingListRef.doc(normalizedId).get();
+
+        if (docSnapshot.exists) {
+          // Αν υπάρχει διαβάζουμε την παλιά ποσότητα σε γραμμάρια
+          var data = docSnapshot.data() as Map<String, dynamic>;
+          int existingAmount = data['amount'] ?? 0;
+
+          if (existingAmount > 0) {
+            // Αν είχε προέλθει από άλλη συνταγή δηλαδή έχει γραμμάρια αθροίζουμε
+            await shoppingListRef.doc(normalizedId).update({
+              'amount': existingAmount + newAmount,
+              'isChecked': false, 
+            });
+          } else {
+            // Αν υπήρχε ως custom προϊόν ελέγχουμε τη λογική της ποσότητας
+            String existingQuantity = data['quantity'] ?? '';
+            
+            if (existingQuantity.isNotEmpty) {
+              String lowerQty = existingQuantity.toLowerCase();
+              
+              // Ελέγχουμε αν ο χρήστης αναφέρει ρητά κάποια μονάδα γραμμαρίων
+              if (RegExp(r'γραμμάρια|γραμμάριο|γραμμαρια|γραμμαριο|γραμμ|γραμ|γρ|grams|gram|gr|g').hasMatch(lowerQty)) {
+                
+                String cleanedQty = lowerQty
+                    .replaceAll(RegExp(r'γραμμάρια|γραμμάριο|γραμμαρια|γραμμαριο|γραμμ|γραμ|γρ|grams|gram|gr|g'), '')
+                    .trim();
+                    
+                int? parsedGrams = int.tryParse(cleanedQty);
+                
+                if (parsedGrams != null) {
+                  await shoppingListRef.doc(normalizedId).update({
+                    'amount': parsedGrams + newAmount,
+                    'quantity': '',
+                    'isChecked': false,
+                  });
+                } else {
+                  await shoppingListRef.doc(normalizedId).update({
+                    'quantity': '$existingQuantity + ${newAmount}g',
+                    'isChecked': false,
+                  });
+                }
+              } else {
+                // δεν είχε μονάδα βάρους πχ 3 τεμάχια
+                await shoppingListRef.doc(normalizedId).update({
+                  'quantity': '$existingQuantity + ${newAmount}g',
+                  'isChecked': false,
+                });
+              }
+            } else {
+              await shoppingListRef.doc(normalizedId).update({
+                'amount': newAmount,
+                'isChecked': false,
+              });
+            }
+          }
+        } else {
+          await shoppingListRef.doc(normalizedId).set({
+            'name': ingredientName,
+            'amount': newAmount,
+            'quantity': '',
+            'isChecked': false,
+            'addedAt': FieldValue.serverTimestamp(),
+          });
+        }
       }
 
       if (mounted) {
@@ -524,7 +574,6 @@ const SizedBox(height: 20),
             ]),
             
             const Divider(height: 40),
-            // Αρχή: Τροποποιημένη Επικεφαλίδα Υλικών
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -560,3 +609,13 @@ const SizedBox(height: 20),
     );
   }
 }
+
+String removeAccents(String text) {
+    String normalized = text.toLowerCase();
+    const withAccents = 'άέήίϊΐόύϋΰώ';
+    const withoutAccents = 'αεηιιιουυυω';
+    for (int i = 0; i < withAccents.length; i++) {
+      normalized = normalized.replaceAll(withAccents[i], withoutAccents[i]);
+    }
+    return normalized;
+  }
