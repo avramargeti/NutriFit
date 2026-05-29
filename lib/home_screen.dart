@@ -9,6 +9,7 @@ import 'add_recipe_screen.dart';
 import 'recipes_list_screen.dart';
 import 'cooking_book_screen.dart';
 import 'fitness_programs_screen.dart';
+import 'super_market_list_screen.dart';
 import 'fitness_screen.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -265,12 +266,27 @@ class _HomeScreenState extends State<HomeScreen> {
               onTap: () => _showRecipesModal(context),
             ),
             const SizedBox(height: 20),
+
+            // --- ΝΕΟ ΚΟΥΜΠΙ: ΛΙΣΤΑ SUPER MARKET ---
+            _buildDashboardButton(
+              context,
+              title: 'ΛΙΣΤΑ SUPER MARKET',
+              icon: Icons.shopping_cart_outlined,
+              color: slateGrey,
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => const SuperMarketListScreen()),
+                );
+              },
+            ),
+            const SizedBox(height: 20),
             
             _buildDashboardButton(
               context,
               title: 'FITNESS',
               icon: Icons.fitness_center,
-              color: slateGrey,
+              color: sageGreen,
               onTap: () {
                 Navigator.push(
                   context,
