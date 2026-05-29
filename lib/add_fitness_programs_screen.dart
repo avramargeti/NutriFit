@@ -92,14 +92,12 @@ class _AddFitnessProgramScreenState extends State<AddFitnessProgramScreen> {
       };
 
       if (widget.programId != null) {
-        // ΕΠΕΞΕΡΓΑΣΙΑ
         await FirebaseFirestore.instance
             .collection('fitness_programs')
             .doc(widget.programId)
             .update(programData);
       } else {
-        // ΔΗΜΙΟΥΡΓΙΑ
-        programData['createdBy'] = user.uid; // Αποθήκευση ID Δημιουργού
+        programData['createdBy'] = user.uid; 
         programData['createdAt'] = FieldValue.serverTimestamp();
         
         await FirebaseFirestore.instance
@@ -165,7 +163,7 @@ class _AddFitnessProgramScreenState extends State<AddFitnessProgramScreen> {
               const SizedBox(height: 15),
               
               DropdownButtonFormField<String>(
-                value: _selectedCategory,
+                initialValue: _selectedCategory,
                 decoration: const InputDecoration(labelText: 'Κατηγορία'),
                 items: _categories.map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
                 onChanged: (val) => setState(() => _selectedCategory = val!),
@@ -173,7 +171,7 @@ class _AddFitnessProgramScreenState extends State<AddFitnessProgramScreen> {
               const SizedBox(height: 15),
               
               DropdownButtonFormField<String>(
-                value: _selectedLocation,
+                initialValue: _selectedLocation,
                 decoration: const InputDecoration(labelText: 'Τοποθεσία'),
                 items: _locations.map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
                 onChanged: (val) => setState(() => _selectedLocation = val!),
@@ -181,7 +179,7 @@ class _AddFitnessProgramScreenState extends State<AddFitnessProgramScreen> {
               const SizedBox(height: 15),
               
               DropdownButtonFormField<String>(
-                value: _selectedIntensity,
+                initialValue: _selectedIntensity,
                 decoration: const InputDecoration(labelText: 'Ένταση'),
                 items: _intensities.map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
                 onChanged: (val) => setState(() => _selectedIntensity = val!),
@@ -189,7 +187,7 @@ class _AddFitnessProgramScreenState extends State<AddFitnessProgramScreen> {
               const SizedBox(height: 15),
               
               DropdownButtonFormField<String>(
-                value: _selectedDuration,
+                initialValue: _selectedDuration,
                 decoration: const InputDecoration(labelText: 'Διάρκεια'),
                 items: _durations.map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
                 onChanged: (val) => setState(() => _selectedDuration = val!),

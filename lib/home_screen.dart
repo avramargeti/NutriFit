@@ -4,13 +4,13 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'goals_screen.dart';
 import 'auth_screen.dart';
 import 'admin_add_ingredient_screen.dart';
-import 'admin_edit_ingredient_screen.dart';
 import 'ingredients_list_screen.dart';
 import 'add_recipe_screen.dart';
 import 'recipes_list_screen.dart';
-import 'fitness_screen.dart';
+import 'cooking_book_screen.dart';
 import 'fitness_programs_screen.dart';
 import 'super_market_list_screen.dart';
+import 'fitness_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -173,7 +173,12 @@ class _HomeScreenState extends State<HomeScreen> {
           IconButton(
             icon: const Icon(Icons.menu_book),
             tooltip: 'My Cooking Book',
-            onPressed: () => _showComingSoon("My Cooking Book"),
+            onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => const CookingBookScreen()),
+                );
+              },
           ),
           IconButton(
             icon: const Icon(Icons.logout),
