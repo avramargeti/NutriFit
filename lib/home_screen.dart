@@ -8,6 +8,8 @@ import 'ingredients_list_screen.dart';
 import 'add_recipe_screen.dart';
 import 'recipes_list_screen.dart';
 import 'cooking_book_screen.dart';
+import 'fitness_programs_screen.dart';
+import 'fitness_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
