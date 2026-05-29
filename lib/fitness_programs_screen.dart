@@ -163,7 +163,7 @@ class _FitnessProgramsScreenState extends State<FitnessProgramsScreen> {
                     max: 120,
                     divisions: 11,
                     activeColor: sageGreen,
-                    inactiveColor: sageGreen.withOpacity(0.3),
+                    inactiveColor: sageGreen.withValues(alpha: 0.3),
                     onChanged: (val) {
                       setState(() {
                         selectedMinutes = val.toInt();
@@ -175,9 +175,9 @@ class _FitnessProgramsScreenState extends State<FitnessProgramsScreen> {
                   Container(
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                      color: Colors.orange.withOpacity(0.1),
+                      color: Colors.orange.withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(10),
-                      border: Border.all(color: Colors.orange.withOpacity(0.5))
+                      border: Border.all(color: Colors.orange.withValues(alpha: 0.5))
                     ),
                     child: Row(
                       children: [
@@ -220,8 +220,8 @@ class _FitnessProgramsScreenState extends State<FitnessProgramsScreen> {
                           'status': 'Εκκρεμεί', 
                         });
                         
-                        if (mounted) {
-                          Navigator.pop(context); 
+                        if (!context.mounted) return;
+                          Navigator.pop(context, true); 
                           ScaffoldMessenger.of(context).showSnackBar(
                             SnackBar(
                               content: const Text('Επιτυχής προσθήκη στο προσωπικό πλάνο!'),
@@ -229,7 +229,7 @@ class _FitnessProgramsScreenState extends State<FitnessProgramsScreen> {
                               behavior: SnackBarBehavior.floating,
                             ),
                           );
-                        }
+                        
                       } catch (e) {
                         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Σφάλμα αποθήκευσης: $e')));
                       }
@@ -347,7 +347,7 @@ class _FitnessProgramsScreenState extends State<FitnessProgramsScreen> {
                       Container(
                         margin: const EdgeInsets.all(16),
                         padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(color: sageGreen.withOpacity(0.15), border: Border.all(color: sageGreen.withOpacity(0.5)), borderRadius: BorderRadius.circular(15)),
+                        decoration: BoxDecoration(color: sageGreen.withValues(alpha: 0.15), border: Border.all(color: sageGreen.withValues(alpha: 0.5)), borderRadius: BorderRadius.circular(15)),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [

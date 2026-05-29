@@ -118,7 +118,7 @@ class _AddEditFitnessProgramScreenState extends State<AddEditFitnessProgramScree
               const SizedBox(height: 15),
               
               DropdownButtonFormField<String>(
-                value: _selectedCategory,
+                initialValue: _selectedCategory,
                 decoration: const InputDecoration(labelText: 'Κατηγορία'),
                 items: _categories.map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
                 onChanged: (val) => setState(() => _selectedCategory = val!),
@@ -126,7 +126,7 @@ class _AddEditFitnessProgramScreenState extends State<AddEditFitnessProgramScree
               const SizedBox(height: 15),
               
               DropdownButtonFormField<String>(
-                value: _selectedLocation,
+                initialValue: _selectedLocation,
                 decoration: const InputDecoration(labelText: 'Τοποθεσία'),
                 items: _locations.map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
                 onChanged: (val) => setState(() => _selectedLocation = val!),
@@ -134,7 +134,7 @@ class _AddEditFitnessProgramScreenState extends State<AddEditFitnessProgramScree
               const SizedBox(height: 15),
               
               DropdownButtonFormField<String>(
-                value: _selectedIntensity,
+                initialValue: _selectedIntensity,
                 decoration: const InputDecoration(labelText: 'Ένταση'),
                 items: _intensities.map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
                 onChanged: (val) => setState(() => _selectedIntensity = val!),
@@ -142,7 +142,7 @@ class _AddEditFitnessProgramScreenState extends State<AddEditFitnessProgramScree
               const SizedBox(height: 15),
               
               DropdownButtonFormField<String>(
-                value: _selectedDuration,
+                initialValue: _selectedDuration,
                 decoration: const InputDecoration(labelText: 'Διάρκεια'),
                 items: _durations.map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
                 onChanged: (val) => setState(() => _selectedDuration = val!),
