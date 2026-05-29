@@ -418,7 +418,7 @@ class _GoalsScreenState extends State<GoalsScreen> {
             const SizedBox(height: 15),
             TextButton(
               onPressed: () {
-                Navigator.push(
+                Navigator.pushReplacement(
                   context,
                   MaterialPageRoute(
                     builder: (context) => const RegistrationScreen(initialStep: 1),
