@@ -73,7 +73,7 @@ class _SuperMarketListScreenState extends State<SuperMarketListScreen> {
               String newQty = qtyController.text.trim();
               if (newName.isEmpty || currentUser == null) return;
 
-              String newDocId = removeAccents(newName);
+              String newDocId = generateIngredientId(newName);
 
               final collectionRef = FirebaseFirestore.instance
                   .collection('users')
@@ -81,13 +81,23 @@ class _SuperMarketListScreenState extends State<SuperMarketListScreen> {
                   .collection('shoppingList');
 
               if (newDocId == docId) {
-                // Αν δεν άλλαξε το όνομα κάνουμε απλό update
                 await collectionRef.doc(docId).update({
+                  'name': newName,
                   'quantity': newQty,
-                  'amount': 0, // Μηδενίζουμε το amount της συνταγής ώστε να φαίνεται μόνο το νέο quantity
+                  'amount': 0,
                 });
               } else {
-                // Αν άλλαξε το όνομα φτιάχνουμε νέο αρχείο και σβήνουμε το παλιό
+                final existingDoc = await collectionRef.doc(newDocId).get();
+                if (existingDoc.exists) {
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Υπάρχει ήδη προϊόν με αυτό το όνομα στη λίστα!')),
+                    );
+                  }
+                  return;
+                }
+
+                // Αν δεν υπάρχει, φτιάχνουμε νέο αρχείο και σβήνουμε το παλιό
                 final oldDoc = await collectionRef.doc(docId).get();
                 bool isChecked = oldDoc.exists ? (oldDoc.data()?['isChecked'] ?? false) : false;
                 
@@ -152,7 +162,7 @@ class _SuperMarketListScreenState extends State<SuperMarketListScreen> {
               String qty = qtyController.text.trim();
               if (name.isNotEmpty && currentUser != null) {
 
-                String normalizedId = removeAccents(name);
+                String normalizedId = generateIngredientId(name);
 
                 final docRef = FirebaseFirestore.instance
                     .collection('users')
@@ -164,6 +174,12 @@ class _SuperMarketListScreenState extends State<SuperMarketListScreen> {
                 if (docSnapshot.exists) {
                   if (mounted) {
                     Navigator.pop(context);
+
+                    var data = docSnapshot.data() as Map<String, dynamic>;
+                    String existingName = data['name'] ?? name;
+                    String existingQty = data['quantity'] ?? '';
+                    int existingAmount = data['amount'] ?? 0;
+                    String existingId = docSnapshot.id;
                     
                     showDialog(
                       context: context,
@@ -176,11 +192,18 @@ class _SuperMarketListScreenState extends State<SuperMarketListScreen> {
                             Text('Ενημέρωση'),
                           ],
                         ),
-                        content: const Text('Το προϊόν υπάρχει ήδη στη λίστα σας!'),
+                        content: const Text('Το προϊόν υπάρχει ήδη στη λίστα σας.\nΘέλετε να επεξεργαστείτε την ποσότητά του;'),
                         actions: [
                           TextButton(
                             onPressed: () => Navigator.pop(context),
-                            child: const Text('ΟΚ', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.blueAccent)),
+                            child: const Text('ΑΚΥΡΟ', style: TextStyle(color: Colors.grey)),
+                          ),
+                          TextButton(
+                            onPressed: () {
+                              Navigator.pop(context);
+                              _showEditItemDialog(existingId, existingName, existingQty, existingAmount);
+                            },
+                            child: const Text('ΕΠΕΞΕΡΓΑΣΙΑ', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.blueAccent)),
                           ),
                         ],
                       ),
@@ -232,7 +255,7 @@ class _SuperMarketListScreenState extends State<SuperMarketListScreen> {
               String qty = qtyController.text.trim();
               if (currentUser != null) {
 
-                String normalizedId = removeAccents(ingName);
+                String normalizedId = generateIngredientId(ingName);
                 
                 final docRef = FirebaseFirestore.instance
                     .collection('users')
@@ -244,6 +267,12 @@ class _SuperMarketListScreenState extends State<SuperMarketListScreen> {
                 if (docSnapshot.exists) {
                   if (mounted) {
                     Navigator.pop(context);
+
+                     var data = docSnapshot.data() as Map<String, dynamic>;
+                    String existingName = data['name'] ?? ingName;
+                    String existingQty = data['quantity'] ?? '';
+                    int existingAmount = data['amount'] ?? 0;
+                    String existingId = docSnapshot.id;
                     
                     showDialog(
                       context: context,
@@ -256,11 +285,18 @@ class _SuperMarketListScreenState extends State<SuperMarketListScreen> {
                             Text('Ενημέρωση'),
                           ],
                         ),
-                        content: const Text('Το προϊόν υπάρχει ήδη στη λίστα σας!'),
+                        content: const Text('Το προϊόν υπάρχει ήδη στη λίστα σας.\nΘέλετε να επεξεργαστείτε την ποσότητά του;'),
                         actions: [
                           TextButton(
                             onPressed: () => Navigator.pop(context),
-                            child: const Text('ΟΚ', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.blueAccent)),
+                            child: const Text('ΑΚΥΡΟ', style: TextStyle(color: Colors.grey)),
+                          ),
+                          TextButton(
+                            onPressed: () {
+                              Navigator.pop(context); 
+                              _showEditItemDialog(existingId, existingName, existingQty, existingAmount);
+                            },
+                            child: const Text('ΕΠΕΞΕΡΓΑΣΙΑ', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.blueAccent)),
                           ),
                         ],
                       ),

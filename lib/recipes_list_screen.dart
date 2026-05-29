@@ -406,9 +406,8 @@ class _RecipeDetailsSheetState extends State<RecipeDetailsSheet> {
         int newAmount = ((ing['amount'] as num) * multiplier).round();
         String ingredientName = ing['name'];
 
-        String normalizedId = removeAccents(ingredientName);
+        String normalizedId = generateIngredientId(ingredientName);
 
-        // Έλεγχος αν το υλικό υπάρχει ήδη στη λίστα
         final docSnapshot = await shoppingListRef.doc(normalizedId).get();
 
         if (docSnapshot.exists) {
@@ -619,3 +618,20 @@ String removeAccents(String text) {
     }
     return normalized;
   }
+
+String generateIngredientId(String text) {
+  // Χρησιμοποιεί τη removeAccents χωρίς να την τροποποιεί για να μην επηρεάσει άλλες μεθόδους που τη χρησιμοποιούν
+  String id = removeAccents(text); 
+  
+  id = id.replaceAll('ς', 'σ')
+         .replaceAll('a', 'α')
+         .replaceAll('e', 'ε')
+         .replaceAll('i', 'ι')
+         .replaceAll('o', 'ο')
+         .replaceAll('u', 'υ')
+         .replaceAll('x', 'χ');
+         
+  id = id.replaceAll(RegExp(r'[\u0300-\u036f]'), '');
+  
+  return id;
+}
