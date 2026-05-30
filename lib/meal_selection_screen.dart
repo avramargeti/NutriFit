@@ -221,16 +221,14 @@ class _MealSelectionScreenState extends State<MealSelectionScreen> {
               return;
             }
 
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) => MealDetailsScreen(
-                  itemData: data,
-                  category: widget.category,
-                  dateString: widget.dateString,
-                  isExercise: widget.isExercise,
-                  title: title,
-                ),
+            showDialog(
+              context: context,
+              builder: (context) => MealDetailsScreen(
+                itemData: data,
+                category: widget.category,
+                dateString: widget.dateString,
+                isExercise: widget.isExercise,
+                title: title,
               ),
             );
           },

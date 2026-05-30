@@ -118,29 +118,43 @@ class _MealDetailsScreenState extends State<MealDetailsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: Text(widget.title), backgroundColor: Colors.white),
-      body: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          children: [
-            TextField(
-              controller: qtyController,
-              keyboardType: TextInputType.number,
-              decoration: const InputDecoration(
-                labelText: 'Ποσότητα (g/λεπτά)',
-              ),
+    return AlertDialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+      title: Text(widget.title),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          TextField(
+            controller: qtyController,
+            keyboardType: TextInputType.number,
+            autofocus: true,
+            decoration: InputDecoration(
+              labelText: widget.isExercise ? 'Διάρκεια' : 'Ποσότητα',
+              suffixText: widget.isExercise ? 'λεπτά' : 'g',
             ),
-            const SizedBox(height: 20),
-            ElevatedButton(
-              onPressed: isLoading ? null : _saveEntry,
-              child: isLoading
-                  ? const CircularProgressIndicator(color: Colors.white)
-                  : const Text('ΚΑΤΑΧΩΡΗΣΗ'),
-            ),
-          ],
-        ),
+          ),
+        ],
       ),
+      actions: [
+        TextButton(
+          onPressed: isLoading ? null : () => Navigator.pop(context),
+          child: const Text('ΑΚΥΡΟ'),
+        ),
+        ElevatedButton(
+          style: ElevatedButton.styleFrom(backgroundColor: sageGreen),
+          onPressed: isLoading ? null : _saveEntry,
+          child: isLoading
+              ? const SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(
+                    color: Colors.white,
+                    strokeWidth: 2,
+                  ),
+                )
+              : const Text('ΚΑΤΑΧΩΡΗΣΗ', style: TextStyle(color: Colors.white)),
+        ),
+      ],
     );
   }
 }

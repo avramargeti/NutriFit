@@ -650,6 +650,7 @@ class RecipeDetailsSheet extends StatefulWidget {
 class _RecipeDetailsSheetState extends State<RecipeDetailsSheet> {
   late int _selectedServings;
   late int _originalServings;
+  final Set<String> _excludedIngredientKeys = {};
   final Color sageGreen = const Color(0xFFA8B3A0);
   final Color slateGrey = const Color(0xFF8C9DA6);
   final RecipeService _recipeService = RecipeService();
@@ -679,6 +680,104 @@ class _RecipeDetailsSheetState extends State<RecipeDetailsSheet> {
     return _asInt(widget.data[perServingKey]) * _originalServings;
   }
 
+  double _asDouble(dynamic value) {
+    if (value is num) return value.toDouble();
+    return double.tryParse(value?.toString() ?? '') ?? 0.0;
+  }
+
+  List<Map<String, dynamic>> _recipeIngredients() {
+    final ingredients = widget.data['ingredients'];
+    if (ingredients is! List) return [];
+
+    return ingredients
+        .whereType<Map>()
+        .map((ingredient) => Map<String, dynamic>.from(ingredient))
+        .toList();
+  }
+
+  String _ingredientKey(Map<String, dynamic> ingredient, int index) {
+    return '${ingredient['name'] ?? 'ingredient'}-${ingredient['amount'] ?? 0}-$index';
+  }
+
+  Map<String, double> _ingredientTotals(
+    Map<String, dynamic> ingredient,
+    double multiplier,
+  ) {
+    final amount = _asDouble(ingredient['amount']) * multiplier;
+    final ratio = amount / 100.0;
+
+    return {
+      'calories': ratio * _asDouble(ingredient['caloriesPer100g']),
+      'protein': ratio * _asDouble(ingredient['proteinPer100g']),
+      'carbs': ratio * _asDouble(ingredient['carbsPer100g']),
+      'fats': ratio * _asDouble(ingredient['fatsPer100g']),
+      'amount': amount,
+    };
+  }
+
+  Map<String, int> _displayTotals(double multiplier) {
+    final ingredients = _recipeIngredients();
+    double calories = 0;
+    double protein = 0;
+    double carbs = 0;
+    double fats = 0;
+
+    for (final indexedIngredient in ingredients.asMap().entries) {
+      final key = _ingredientKey(
+        indexedIngredient.value,
+        indexedIngredient.key,
+      );
+      if (_excludedIngredientKeys.contains(key)) continue;
+
+      final totals = _ingredientTotals(indexedIngredient.value, multiplier);
+      calories += totals['calories'] ?? 0;
+      protein += totals['protein'] ?? 0;
+      carbs += totals['carbs'] ?? 0;
+      fats += totals['fats'] ?? 0;
+    }
+
+    final hasIngredientNutrition =
+        calories > 0 || protein > 0 || carbs > 0 || fats > 0;
+    if (!hasIngredientNutrition && _excludedIngredientKeys.isEmpty) {
+      return {
+        'calories':
+            (_totalValue('totalCalories', 'caloriesPerServing') * multiplier)
+                .round(),
+        'protein':
+            (_totalValue('totalProtein', 'proteinPerServing') * multiplier)
+                .round(),
+        'carbs': (_totalValue('totalCarbs', 'carbsPerServing') * multiplier)
+            .round(),
+        'fats': (_totalValue('totalFats', 'fatsPerServing') * multiplier)
+            .round(),
+      };
+    }
+
+    return {
+      'calories': calories.round(),
+      'protein': protein.round(),
+      'carbs': carbs.round(),
+      'fats': fats.round(),
+    };
+  }
+
+  List<Map<String, dynamic>> _ingredientBreakdown(double multiplier) {
+    return _recipeIngredients().asMap().entries.map((indexedIngredient) {
+      final ingredient = indexedIngredient.value;
+      final key = _ingredientKey(ingredient, indexedIngredient.key);
+      final totals = _ingredientTotals(ingredient, multiplier);
+      return {
+        'name': ingredient['name'] ?? 'Υλικό',
+        'amount': (totals['amount'] ?? 0).round(),
+        'calories': (totals['calories'] ?? 0).round(),
+        'protein': (totals['protein'] ?? 0).round(),
+        'carbs': (totals['carbs'] ?? 0).round(),
+        'fats': (totals['fats'] ?? 0).round(),
+        'excluded': _excludedIngredientKeys.contains(key),
+      };
+    }).toList();
+  }
+
   Future<void> _addRecipeToDiary() async {
     final user = FirebaseAuth.instance.currentUser;
     final diaryDateString = widget.diaryDateString;
@@ -688,15 +787,14 @@ class _RecipeDetailsSheetState extends State<RecipeDetailsSheet> {
     }
 
     final multiplier = _selectedServings / _originalServings;
-    final calories =
-        (_totalValue('totalCalories', 'caloriesPerServing') * multiplier)
-            .round();
-    final protein =
-        (_totalValue('totalProtein', 'proteinPerServing') * multiplier).round();
-    final carbs = (_totalValue('totalCarbs', 'carbsPerServing') * multiplier)
-        .round();
-    final fats = (_totalValue('totalFats', 'fatsPerServing') * multiplier)
-        .round();
+    final totals = _displayTotals(multiplier);
+    final ingredientBreakdown = _ingredientBreakdown(multiplier);
+    final usedIngredients = ingredientBreakdown
+        .where((ingredient) => ingredient['excluded'] != true)
+        .toList();
+    final removedIngredients = ingredientBreakdown
+        .where((ingredient) => ingredient['excluded'] == true)
+        .toList();
 
     await FirebaseFirestore.instance
         .collection('users')
@@ -711,12 +809,14 @@ class _RecipeDetailsSheetState extends State<RecipeDetailsSheet> {
               'isExercise': false,
               'isRecipe': true,
               'recipeId': widget.recipeId,
-              'calories': calories,
-              'protein': protein,
-              'carbs': carbs,
-              'fats': fats,
+              'calories': totals['calories'],
+              'protein': totals['protein'],
+              'carbs': totals['carbs'],
+              'fats': totals['fats'],
               'quantity': _selectedServings,
               'unit': 'μερίδες',
+              'ingredientsUsed': usedIngredients,
+              'ingredientsRemoved': removedIngredients,
               'loggedAt': Timestamp.now(),
               'imageUrl': widget.data['imageUrl'] ?? '',
             },
@@ -909,15 +1009,12 @@ class _RecipeDetailsSheetState extends State<RecipeDetailsSheet> {
   @override
   Widget build(BuildContext context) {
     double multiplier = _selectedServings / _originalServings;
-    int displayCals =
-        (_totalValue('totalCalories', 'caloriesPerServing') * multiplier)
-            .round();
-    int displayProtein =
-        (_totalValue('totalProtein', 'proteinPerServing') * multiplier).round();
-    int displayCarbs =
-        (_totalValue('totalCarbs', 'carbsPerServing') * multiplier).round();
-    int displayFats = (_totalValue('totalFats', 'fatsPerServing') * multiplier)
-        .round();
+    final displayTotals = _displayTotals(multiplier);
+    int displayCals = displayTotals['calories'] ?? 0;
+    int displayProtein = displayTotals['protein'] ?? 0;
+    int displayCarbs = displayTotals['carbs'] ?? 0;
+    int displayFats = displayTotals['fats'] ?? 0;
+    final ingredientBreakdown = _ingredientBreakdown(multiplier);
 
     final currentUser = FirebaseAuth.instance.currentUser;
     final List<String> adminEmails = [
@@ -1423,37 +1520,111 @@ class _RecipeDetailsSheetState extends State<RecipeDetailsSheet> {
                   'ΥΛΙΚΑ',
                   style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                 ),
-                TextButton.icon(
-                  onPressed: () => _addIngredientsToShoppingList(
-                    widget.data['ingredients'] as List,
-                    multiplier,
+                if (!_isDiaryLogging)
+                  TextButton.icon(
+                    onPressed: () => _addIngredientsToShoppingList(
+                      widget.data['ingredients'] as List,
+                      multiplier,
+                    ),
+                    icon: const Icon(Icons.add_shopping_cart, size: 18),
+                    label: const Text(
+                      'Λίστα Αγορών',
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    style: TextButton.styleFrom(foregroundColor: sageGreen),
                   ),
-                  icon: const Icon(Icons.add_shopping_cart, size: 18),
-                  label: const Text(
-                    'Λίστα Αγορών',
-                    style: TextStyle(fontWeight: FontWeight.bold),
-                  ),
-                  style: TextButton.styleFrom(foregroundColor: sageGreen),
-                ),
               ],
             ),
+            if (_isDiaryLogging)
+              Padding(
+                padding: const EdgeInsets.only(top: 4, bottom: 8),
+                child: Text(
+                  'Αφαίρεσε όσα υλικά δεν χρησιμοποιήθηκαν σε αυτό το γεύμα.',
+                  style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
+                ),
+              ),
             const SizedBox(height: 12),
-            ...(widget.data['ingredients'] as List).map((i) {
-              int displayAmount = ((i['amount'] as num) * multiplier).round();
-              return Padding(
-                padding: const EdgeInsets.symmetric(vertical: 4),
+            ...ingredientBreakdown.asMap().entries.map((entry) {
+              final index = entry.key;
+              final ingredient = entry.value;
+              final excluded = ingredient['excluded'] == true;
+
+              return Container(
+                margin: const EdgeInsets.only(bottom: 8),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 8,
+                ),
+                decoration: BoxDecoration(
+                  color: excluded
+                      ? Colors.redAccent.withValues(alpha: 0.06)
+                      : sageGreen.withValues(alpha: 0.07),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                    color: excluded
+                        ? Colors.redAccent.withValues(alpha: 0.18)
+                        : sageGreen.withValues(alpha: 0.18),
+                  ),
+                ),
                 child: Row(
                   children: [
-                    const Icon(
-                      Icons.check_circle_outline,
-                      size: 18,
-                      color: Colors.orangeAccent,
+                    Icon(
+                      excluded
+                          ? Icons.remove_circle_outline
+                          : Icons.check_circle_outline,
+                      size: 20,
+                      color: excluded ? Colors.redAccent : sageGreen,
                     ),
                     const SizedBox(width: 10),
-                    Text(
-                      '${i['name']} (${displayAmount}g)',
-                      style: const TextStyle(fontSize: 16),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            '${ingredient['name']} (${ingredient['amount']}g)',
+                            style: TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.bold,
+                              color: excluded ? Colors.grey : Colors.black87,
+                              decoration: excluded
+                                  ? TextDecoration.lineThrough
+                                  : TextDecoration.none,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            '${ingredient['calories']} kcal • Π ${ingredient['protein']}g • Υ ${ingredient['carbs']}g • Λ ${ingredient['fats']}g',
+                            style: TextStyle(
+                              color: excluded
+                                  ? Colors.grey
+                                  : Colors.grey.shade700,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
+                    if (_isDiaryLogging)
+                      IconButton(
+                        tooltip: excluded
+                            ? 'Επαναφορά υλικού'
+                            : 'Αφαίρεση υλικού',
+                        icon: Icon(
+                          excluded ? Icons.undo : Icons.close,
+                          color: excluded ? slateGrey : Colors.redAccent,
+                        ),
+                        onPressed: () {
+                          final ingredients = _recipeIngredients();
+                          final key = _ingredientKey(ingredients[index], index);
+                          setState(() {
+                            if (excluded) {
+                              _excludedIngredientKeys.remove(key);
+                            } else {
+                              _excludedIngredientKeys.add(key);
+                            }
+                          });
+                        },
+                      ),
                   ],
                 ),
               );
