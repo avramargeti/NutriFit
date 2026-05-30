@@ -13,6 +13,7 @@ import 'super_market_list_screen.dart';
 import 'fitness_screen.dart';
 import 'calendar_screen.dart';
 
+
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
 
@@ -180,6 +181,7 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ],
       ),
+
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(24.0),
         child: Column(
@@ -365,8 +367,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   Navigator.push(
                     context,
                     MaterialPageRoute(
-                      builder: (context) =>
-                          const FitnessProgramsScreen(viewAll: true),
+                      builder: (context) => const FitnessProgramsScreen(viewAll: true, isAdmin: true),
                     ),
                   );
                 },
