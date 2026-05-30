@@ -9,7 +9,12 @@ class CycleService {
     final user = _auth.currentUser;
     if (user == null) throw Exception("Δεν βρέθηκε συνδεδεμένος χρήστης");
 
-    return _db.collection('users').doc(user.uid).collection('cycleProfile').doc('settings').snapshots();
+    return _db
+        .collection('users')
+        .doc(user.uid)
+        .collection('cycleProfile')
+        .doc('settings')
+        .snapshots();
   }
 
   // Προστέθηκαν τα 2 νέα πεδία
@@ -17,23 +22,32 @@ class CycleService {
     required DateTime lastPeriodStart,
     required int cycleLength,
     required int periodDuration,
-    required String regularity, 
+    required String regularity,
     required List<String> typicalSymptoms,
+    bool usesDefaultSettings = false,
   }) async {
     final user = _auth.currentUser;
     if (user == null) return;
 
-    DateTime nextPeriodPredicted = lastPeriodStart.add(Duration(days: cycleLength));
+    DateTime nextPeriodPredicted = lastPeriodStart.add(
+      Duration(days: cycleLength),
+    );
 
     // Αποθήκευση όλων στη βάση δεδομένων
-    await _db.collection('users').doc(user.uid).collection('cycleProfile').doc('settings').set({
-      'lastPeriodStart': lastPeriodStart,
-      'cycleLength': cycleLength,
-      'periodDuration': periodDuration,
-      'nextPeriodPredicted': nextPeriodPredicted,
-      'regularity': regularity,           // <-- ΝΕΟ
-      'typicalSymptoms': typicalSymptoms, // <-- ΝΕΟ
-      'createdAt': FieldValue.serverTimestamp(),
-    });
+    await _db
+        .collection('users')
+        .doc(user.uid)
+        .collection('cycleProfile')
+        .doc('settings')
+        .set({
+          'lastPeriodStart': lastPeriodStart,
+          'cycleLength': cycleLength,
+          'periodDuration': periodDuration,
+          'nextPeriodPredicted': nextPeriodPredicted,
+          'regularity': regularity, // <-- ΝΕΟ
+          'typicalSymptoms': typicalSymptoms, // <-- ΝΕΟ
+          'usesDefaultSettings': usesDefaultSettings,
+          'createdAt': FieldValue.serverTimestamp(),
+        });
   }
 }
