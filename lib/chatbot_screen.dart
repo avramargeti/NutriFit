@@ -1,13 +1,5 @@
 import 'package:flutter/material.dart';
-
-// UI Model to represent different message states based on the robustness diagram
-enum MessageType { user, bot, error, constraint, rephrase }
-
-class ChatMessage {
-  final String text;
-  final MessageType type;
-  ChatMessage({required this.text, required this.type});
-}
+import 'chatbot_controller.dart'; 
 
 class ChatbotScreen extends StatefulWidget {
   const ChatbotScreen({super.key});
@@ -23,38 +15,34 @@ class _ChatbotScreenState extends State<ChatbotScreen> {
 
   final TextEditingController _inputController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
+  
+  final ChatbotController _controller = ChatbotController();
 
-  // Stubbed messages to demonstrate the UI states from the sequence diagram
-  final List<ChatMessage> _messages = [
-    ChatMessage(
-      text: "Γεια σας! Είμαι ο προσωπικός σας βοηθός NutriFit. Πώς μπορώ να σας βοηθήσω σήμερα με τη διατροφή ή τη γυμναστική σας;",
-      type: MessageType.bot,
-    ),
-  ];
-
-  // Preset questions based on the robustness diagram
   final List<String> _presetQuestions = [
     "Πόσες θερμίδες έχει ένα μήλο;",
     "Πρότεινέ μου ένα γρήγορο πρωινό.",
     "Τι άσκηση να κάνω για πλάτη;"
   ];
 
-  void _sendMessage(String text) {
-    if (text.trim().isEmpty) return;
+  @override
+  void initState() {
+    super.initState();
+    _controller.initializeHistory();
+    _controller.addListener(_scrollToBottom);
+  }
 
-    setState(() {
-      // 1. User inputs question
-      _messages.add(ChatMessage(text: text, type: MessageType.user));
-      _inputController.clear();
-      
-      // TODO: Hook up ChatbotController.analyzeQuestion(query) here
-    });
-    _scrollToBottom();
+  @override
+  void dispose() {
+    _controller.removeListener(_scrollToBottom);
+    _controller.dispose();
+    _inputController.dispose();
+    _scrollController.dispose();
+    super.dispose();
   }
 
   void _scrollToBottom() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (_scrollController.hasClients) {
+      if (_scrollController.hasClients && !_controller.showSelectionScreen) {
         _scrollController.animateTo(
           _scrollController.position.maxScrollExtent,
           duration: const Duration(milliseconds: 300),
@@ -64,69 +52,123 @@ class _ChatbotScreenState extends State<ChatbotScreen> {
     });
   }
 
-  // --- UI Methods for Testing Diagram States ---
-  // Call these methods from your Controller to trigger the UI changes
-  
-  void showResponse(String response) {
-    setState(() => _messages.add(ChatMessage(text: response, type: MessageType.bot)));
-    _scrollToBottom();
-  }
-
-  void showTopicConstraints() {
-    setState(() => _messages.add(ChatMessage(
-      text: "Παρακαλώ περιορίστε τις ερωτήσεις σας σε θέματα διατροφής, ευεξίας και γυμναστικής.", 
-      type: MessageType.constraint
-    )));
-    _scrollToBottom();
-  }
-
-  void promptRephrase() {
-    setState(() => _messages.add(ChatMessage(
-      text: "Δεν κατάλαβα ακριβώς τι εννοείτε. Μπορείτε να το αναδιατυπώσετε;", 
-      type: MessageType.rephrase
-    )));
-    _scrollToBottom();
-  }
-
-  void showConnectionError() {
-    setState(() => _messages.add(ChatMessage(
-      text: "Υπήρξε πρόβλημα σύνδεσης με τον διακομιστή AI. Παρακαλώ δοκιμάστε ξανά σε λίγο.", 
-      type: MessageType.error
-    )));
-    _scrollToBottom();
+  void _handleSubmitted(String text) {
+    if (text.trim().isEmpty || _controller.isLoading) return;
+    _inputController.clear();
+    _controller.processUserQuery(text); 
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('NutriFit Assistant', style: TextStyle(color: Colors.white)),
-        backgroundColor: sageGreen,
-        iconTheme: const IconThemeData(color: Colors.white),
-      ),
-      // Drawer handles the "checkHistory" and "displayHistoryOptions" from the sequence diagram
-      drawer: _buildHistoryDrawer(),
-      body: Column(
+    return ListenableBuilder(
+      listenable: _controller,
+      builder: (context, child) {
+        return Scaffold(
+          appBar: AppBar(
+            title: const Text('NutriFit Assistant', style: TextStyle(color: Colors.white)),
+            backgroundColor: sageGreen,
+            iconTheme: const IconThemeData(color: Colors.white),
+          ),
+          // Το drawer εμφανίζεται ΜΟΝΟ όταν είμαστε μέσα στο chat (για να μπορεί να αλλάξει συνομιλία)
+          endDrawer: _controller.showSelectionScreen ? null : _buildHistoryDrawer(),
+          body: _controller.isLoading && _controller.currentMessages.isEmpty && _controller.history.isEmpty
+              ? Center(child: CircularProgressIndicator(color: sageGreen))
+              : _controller.showSelectionScreen
+                  ? _buildSelectionScreen() // ΝΕΑ ΟΘΟΝΗ ΕΠΙΛΟΓΗΣ
+                  : _buildActiveChatScreen(), // Η ΚΑΝΟΝΙΚΗ ΟΘΟΝΗ CHAT
+        );
+      },
+    );
+  }
+
+  // ΝΕΑ ΜΕΘΟΔΟΣ: Οθόνη Επιλογής (Use Case Βήμα 3)
+  Widget _buildSelectionScreen() {
+    return Padding(
+      padding: const EdgeInsets.all(24.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // Chat Messages Area
+          Icon(Icons.forum_outlined, size: 60, color: sageGreen),
+          const SizedBox(height: 16),
+          Text(
+            'Καλώς ήρθατε ξανά!',
+            textAlign: TextAlign.center,
+            style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: slateGrey),
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            'Επιλέξτε να συνεχίσετε μια παλιά συζήτηση ή ξεκινήστε μια νέα.',
+            textAlign: TextAlign.center,
+            style: TextStyle(color: Colors.grey, fontSize: 16),
+          ),
+          const SizedBox(height: 32),
+          
+          ElevatedButton.icon(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: sageGreen,
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(vertical: 16),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+            ),
+            icon: const Icon(Icons.add),
+            label: const Text('ΝΕΑ ΣΥΝΟΜΙΛΙΑ', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+            onPressed: _controller.startNewChat,
+          ),
+          const SizedBox(height: 32),
+
+          Text('Ιστορικό Συνομιλιών', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: slateGrey)),
+          const SizedBox(height: 12),
+          
           Expanded(
             child: ListView.builder(
-              controller: _scrollController,
-              padding: const EdgeInsets.all(16),
-              itemCount: _messages.length,
+              itemCount: _controller.history.length,
               itemBuilder: (context, index) {
-                return _buildMessageBubble(_messages[index]);
+                final session = _controller.history[index];
+                return Card(
+                  margin: const EdgeInsets.only(bottom: 12),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  child: ListTile(
+                    leading: CircleAvatar(
+                      backgroundColor: lightBeige,
+                      child: Icon(Icons.chat_bubble_outline, color: sageGreen, size: 20),
+                    ),
+                    title: Text(session.title, style: const TextStyle(fontWeight: FontWeight.bold)),
+                    trailing: const Icon(Icons.arrow_forward_ios, size: 16, color: Colors.grey),
+                    onTap: () => _controller.loadChat(session.id),
+                  ),
+                );
               },
             ),
           ),
-          
-          // Preset Questions Area (from Robustness Diagram)
-          _buildPresetQuestionsRow(),
-          
-          // Input Area
-          _buildInputArea(),
         ],
       ),
+    );
+  }
+
+  // Η κανονική οθόνη του Chat
+  Widget _buildActiveChatScreen() {
+    return Column(
+      children: [
+        Expanded(
+          child: ListView.builder(
+            controller: _scrollController,
+            padding: const EdgeInsets.all(16),
+            itemCount: _controller.currentMessages.length,
+            itemBuilder: (context, index) {
+              return _buildMessageBubble(_controller.currentMessages[index]);
+            },
+          ),
+        ),
+        
+        if (_controller.isLoading && _controller.currentMessages.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.all(8.0),
+            child: Text('Το NutriFit σκέφτεται...', style: TextStyle(color: slateGrey, fontStyle: FontStyle.italic)),
+          ),
+
+        _buildPresetQuestionsRow(),
+        _buildInputArea(),
+      ],
     );
   }
 
@@ -148,13 +190,7 @@ class _ChatbotScreenState extends State<ChatbotScreen> {
             title: const Text('Νέα Συνομιλία', style: TextStyle(fontWeight: FontWeight.bold)),
             onTap: () {
               Navigator.pop(context);
-              setState(() {
-                _messages.clear();
-                _messages.add(ChatMessage(
-                  text: "Γεια σας! Ξεκινήσαμε μια νέα συνομιλία. Πώς μπορώ να βοηθήσω;", 
-                  type: MessageType.bot
-                ));
-              });
+              _controller.startNewChat(); 
             },
           ),
           const Divider(),
@@ -162,17 +198,19 @@ class _ChatbotScreenState extends State<ChatbotScreen> {
             padding: EdgeInsets.all(8.0),
             child: Text('Πρόσφατες', style: TextStyle(color: Colors.grey, fontSize: 12)),
           ),
-          // Stubbed history items
           Expanded(
             child: ListView.builder(
-              itemCount: 3, 
+              itemCount: _controller.history.length, 
               itemBuilder: (context, index) {
+                final session = _controller.history[index];
                 return ListTile(
                   leading: const Icon(Icons.chat_bubble_outline, size: 20),
-                  title: Text('Συνομιλία ${index + 1}', maxLines: 1, overflow: TextOverflow.ellipsis),
+                  title: Text(session.title, maxLines: 1, overflow: TextOverflow.ellipsis),
+                  selected: _controller.currentChatId == session.id,
+                  selectedColor: sageGreen,
                   onTap: () {
-                    // TODO: Hook up ChatbotController.loadChat(chatId)
                     Navigator.pop(context);
+                    _controller.loadChat(session.id); 
                   },
                 );
               },
@@ -183,32 +221,36 @@ class _ChatbotScreenState extends State<ChatbotScreen> {
     );
   }
 
-  Widget _buildMessageBubble(ChatMessage message) {
+ Widget _buildMessageBubble(ChatMessage message) {
     bool isUser = message.type == MessageType.user;
     
-    // Determine styles based on message type (handling diagram states)
     Color bubbleColor;
     Color textColor = isUser ? Colors.white : Colors.black87;
     IconData? stateIcon;
 
     switch (message.type) {
-      case MessageType.user:
-        bubbleColor = sageGreen;
+      case MessageType.user: 
+        bubbleColor = sageGreen; 
         break;
-      case MessageType.bot:
-        bubbleColor = lightBeige;
+      case MessageType.bot: 
+        // ΑΛΛΑΓΗ ΕΔΩ: Το κάναμε λευκό για να κάνει αντίθεση με το μπεζ background
+        bubbleColor = Colors.white; 
         break;
-      case MessageType.constraint:
-        bubbleColor = Colors.orange.shade100;
-        stateIcon = Icons.warning_amber_rounded;
+      case MessageType.constraint: 
+        bubbleColor = Colors.orange.shade100; 
+        stateIcon = Icons.warning_amber_rounded; 
         break;
-      case MessageType.rephrase:
-        bubbleColor = Colors.blue.shade100;
-        stateIcon = Icons.help_outline;
+      case MessageType.rephrase: 
+        bubbleColor = Colors.blue.shade100; 
+        stateIcon = Icons.help_outline; 
         break;
-      case MessageType.error:
-        bubbleColor = Colors.red.shade100;
-        stateIcon = Icons.error_outline;
+      case MessageType.error: 
+        bubbleColor = Colors.red.shade100; 
+        stateIcon = Icons.error_outline; 
+        break;
+      case MessageType.connectionError:
+        bubbleColor = Colors.red.shade50;
+        stateIcon = Icons.wifi_off_rounded;
         break;
     }
 
@@ -226,6 +268,14 @@ class _ChatbotScreenState extends State<ChatbotScreen> {
             bottomLeft: Radius.circular(isUser ? 16 : 0),
             bottomRight: Radius.circular(isUser ? 0 : 16),
           ),
+          // ΝΕΑ ΠΡΟΣΘΗΚΗ: Διακριτική σκιά για να φαίνονται τα bubbles ανάγλυφα
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.06),
+              offset: const Offset(0, 2),
+              blurRadius: 5,
+            ),
+          ],
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
@@ -235,18 +285,13 @@ class _ChatbotScreenState extends State<ChatbotScreen> {
               Icon(stateIcon, size: 18, color: Colors.black54),
               const SizedBox(width: 8),
             ],
-            Flexible(
-              child: Text(
-                message.text,
-                style: TextStyle(color: textColor, fontSize: 15),
-              ),
-            ),
+            Flexible(child: Text(message.text, style: TextStyle(color: textColor, fontSize: 15))),
           ],
         ),
       ),
     );
   }
-
+  
   Widget _buildPresetQuestionsRow() {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -260,7 +305,8 @@ class _ChatbotScreenState extends State<ChatbotScreen> {
               label: Text(q, style: TextStyle(color: slateGrey, fontSize: 13)),
               backgroundColor: lightBeige,
               side: BorderSide(color: sageGreen.withValues(alpha: 0.3)),
-              onPressed: () => _sendMessage(q),
+              onPressed: _controller.isLoading ? null : () => _handleSubmitted(q), 
+              disabledColor: Colors.grey.shade200,
             ),
           )).toList(),
         ),
@@ -273,13 +319,7 @@ class _ChatbotScreenState extends State<ChatbotScreen> {
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
         color: Colors.white,
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
-            offset: const Offset(0, -2),
-            blurRadius: 5,
-          ),
-        ],
+        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.05), offset: const Offset(0, -2), blurRadius: 5)],
       ),
       child: SafeArea(
         child: Row(
@@ -288,29 +328,25 @@ class _ChatbotScreenState extends State<ChatbotScreen> {
               child: TextField(
                 controller: _inputController,
                 textInputAction: TextInputAction.send,
-                onSubmitted: _sendMessage,
+                onSubmitted: _handleSubmitted,
                 decoration: InputDecoration(
                   hintText: 'Πληκτρολογήστε την ερώτησή σας...',
                   hintStyle: TextStyle(color: Colors.grey.shade400),
                   contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                   filled: true,
                   fillColor: lightBeige,
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(25),
-                    borderSide: BorderSide.none,
-                  ),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(25), borderSide: BorderSide.none),
                 ),
               ),
             ),
             const SizedBox(width: 8),
             Container(
-              decoration: BoxDecoration(
-                color: sageGreen,
-                shape: BoxShape.circle,
-              ),
+              decoration: BoxDecoration(color: sageGreen, shape: BoxShape.circle),
               child: IconButton(
                 icon: const Icon(Icons.send, color: Colors.white),
-                onPressed: () => _sendMessage(_inputController.text),
+                onPressed: _controller.isLoading
+                    ? null
+                    : () => _handleSubmitted(_inputController.text),
               ),
             ),
           ],
