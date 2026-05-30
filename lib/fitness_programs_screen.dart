@@ -1,15 +1,22 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:intl/intl.dart';
 import 'add_fitness_programs_screen.dart';
 import 'fitness_quiz_screen.dart';
-import 'smart_insights_service.dart'; 
+import 'smart_insights_service.dart';
 
 class FitnessProgramsScreen extends StatefulWidget {
   final bool viewAll;
   final Map<String, String>? userPreferences;
+  final String? calendarDateString;
 
-  const FitnessProgramsScreen({super.key, required this.viewAll, this.userPreferences});
+  const FitnessProgramsScreen({
+    super.key,
+    required this.viewAll,
+    this.userPreferences,
+    this.calendarDateString,
+  });
 
   @override
   State<FitnessProgramsScreen> createState() => _FitnessProgramsScreenState();
@@ -19,18 +26,55 @@ class _FitnessProgramsScreenState extends State<FitnessProgramsScreen> {
   final Color sageGreen = const Color(0xFFA8B3A0);
   final Color slateGrey = const Color(0xFF8C9DA6);
   final String currentUserId = FirebaseAuth.instance.currentUser?.uid ?? '';
-  final String currentUserEmail = FirebaseAuth.instance.currentUser?.email ?? '';
+  final String currentUserEmail =
+      FirebaseAuth.instance.currentUser?.email ?? '';
   final List<String> adminEmails = [
     'avramargeti@gmail.com',
     'bokosdimitris@gmail.com',
-    'adonopoulouifigeneia@icloud.com'
+    'adonopoulouifigeneia@icloud.com',
   ];
   bool get isAdmin => adminEmails.contains(currentUserEmail);
 
   Map<String, dynamic>? userData;
   bool isLoadingUser = true;
-  bool _isShowingAll = true; 
+  bool _isShowingAll = true;
   Map<String, String>? _currentPreferences;
+
+  bool get _openedFromCalendar => widget.calendarDateString != null;
+
+  DateTime get _calendarDate {
+    final dateString = widget.calendarDateString;
+    if (dateString == null) return DateTime.now();
+    return DateTime.tryParse(dateString) ?? DateTime.now();
+  }
+
+  bool get _isCalendarFuture {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final selected = DateTime(
+      _calendarDate.year,
+      _calendarDate.month,
+      _calendarDate.day,
+    );
+    return selected.isAfter(today);
+  }
+
+  String _dateString(DateTime date) => DateFormat('yyyy-MM-dd').format(date);
+
+  String _displayDate(DateTime date) => DateFormat('d/M/yyyy').format(date);
+
+  String _weekdayLabel(int weekday) {
+    const labels = {
+      1: 'Δευτέρα',
+      2: 'Τρίτη',
+      3: 'Τετάρτη',
+      4: 'Πέμπτη',
+      5: 'Παρασκευή',
+      6: 'Σάββατο',
+      7: 'Κυριακή',
+    };
+    return labels[weekday] ?? 'Ημέρα';
+  }
 
   @override
   void initState() {
@@ -43,12 +87,17 @@ class _FitnessProgramsScreenState extends State<FitnessProgramsScreen> {
   Future<void> _loadUserData() async {
     final user = FirebaseAuth.instance.currentUser;
     if (user != null) {
-      final doc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
+      final doc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .get();
       if (doc.exists && mounted) {
         setState(() {
           userData = doc.data();
           if (userData!.containsKey('fitnessPreferences')) {
-            _currentPreferences = Map<String, String>.from(userData!['fitnessPreferences']);
+            _currentPreferences = Map<String, String>.from(
+              userData!['fitnessPreferences'],
+            );
           }
           isLoadingUser = false;
         });
@@ -70,11 +119,13 @@ class _FitnessProgramsScreenState extends State<FitnessProgramsScreen> {
       builder: (context) => Padding(
         padding: EdgeInsets.only(
           bottom: MediaQuery.of(context).viewInsets.bottom + 24,
-          left: 24, right: 24, top: 24,
+          left: 24,
+          right: 24,
+          top: 24,
         ),
         child: BasicFitnessQuiz(
           onCompleted: () {
-            _loadUserData(); 
+            _loadUserData();
           },
         ),
       ),
@@ -86,24 +137,29 @@ class _FitnessProgramsScreenState extends State<FitnessProgramsScreen> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Επανάληψη Κουίζ'),
-        content: const Text('Θέλετε να επαναλάβετε το κουίζ; Τα προτεινόμενα προγράμματά σας θα αλλάξουν βάσει των νέων απαντήσεων.'),
+        content: const Text(
+          'Θέλετε να επαναλάβετε το κουίζ; Τα προτεινόμενα προγράμματά σας θα αλλάξουν βάσει των νέων απαντήσεων.',
+        ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('ΑΚΥΡΩΣΗ')),
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('ΑΚΥΡΩΣΗ'),
+          ),
           TextButton(
             onPressed: () {
-              Navigator.pop(context); 
-              _showQuiz(); 
+              Navigator.pop(context);
+              _showQuiz();
             },
             child: const Text('ΣΥΝΕΧΕΙΑ', style: TextStyle(color: Colors.red)),
           ),
         ],
-      )
+      ),
     );
   }
 
   Future<void> _addToPlan(Map<String, dynamic> programData) async {
     int baseCalories = programData['estimatedCalories'] ?? 0;
-    int baseDuration = 30; 
+    int baseDuration = 30;
 
     String name = programData['name']?.toString().toLowerCase() ?? '';
     RegExp titleRegExp = RegExp(r"(\d+)\s*(?:'|λεπτά|λεπτα|min)");
@@ -114,11 +170,11 @@ class _FitnessProgramsScreenState extends State<FitnessProgramsScreen> {
     } else {
       String durationStr = programData['duration']?.toString() ?? '';
       if (durationStr == '< 30 λεπτά') {
-        baseDuration = 25; 
+        baseDuration = 25;
       } else if (durationStr == '30-45 λεπτά') {
-        baseDuration = 40; 
+        baseDuration = 40;
       } else if (durationStr == '> 45 λεπτά') {
-        baseDuration = 50; 
+        baseDuration = 50;
       } else {
         RegExp numRegExp = RegExp(r'(\d+)');
         Match? numMatch = numRegExp.firstMatch(durationStr);
@@ -132,6 +188,11 @@ class _FitnessProgramsScreenState extends State<FitnessProgramsScreen> {
 
     int selectedMinutes = baseDuration;
     int calculatedCalories = baseCalories;
+    DateTime selectedPlanDate = widget.calendarDateString != null
+        ? _calendarDate
+        : DateTime.now().add(const Duration(days: 1));
+    String recurrenceType = 'once';
+    int recurrenceWeekday = selectedPlanDate.weekday;
 
     await showDialog(
       context: context,
@@ -139,103 +200,266 @@ class _FitnessProgramsScreenState extends State<FitnessProgramsScreen> {
         return StatefulBuilder(
           builder: (context, setState) {
             return AlertDialog(
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(20),
+              ),
               title: Row(
                 children: [
                   Icon(Icons.calendar_today, color: sageGreen),
                   const SizedBox(width: 10),
-                  const Expanded(child: Text('Προσθήκη στο Πλάνο', style: TextStyle(fontSize: 18))),
+                  Expanded(
+                    child: Text(
+                      _openedFromCalendar && !_isCalendarFuture
+                          ? 'Καταγραφή Άσκησης'
+                          : 'Προσθήκη στο Πλάνο',
+                      style: const TextStyle(fontSize: 18),
+                    ),
+                  ),
                 ],
               ),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Πρόγραμμα: ${programData['name']}', 
-                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)
-                  ),
-                  const SizedBox(height: 20),
-                  Text('Επίλεξε διάρκεια: $selectedMinutes λεπτά', style: TextStyle(color: slateGrey, fontWeight: FontWeight.bold)),
-                  Slider(
-                    value: selectedMinutes.toDouble(),
-                    min: 10,
-                    max: 120,
-                    divisions: 11,
-                    activeColor: sageGreen,
-                    inactiveColor: sageGreen.withValues(alpha: 0.3),
-                    onChanged: (val) {
-                      setState(() {
-                        selectedMinutes = val.toInt();
-                        calculatedCalories = ((baseCalories / baseDuration) * selectedMinutes).round();
-                      });
-                    },
-                  ),
-                  const SizedBox(height: 15),
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: Colors.orange.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(color: Colors.orange.withValues(alpha: 0.5))
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Πρόγραμμα: ${programData['name']}',
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                      ),
                     ),
-                    child: Row(
-                      children: [
-                        const Icon(Icons.local_fire_department, color: Colors.orange),
-                        const SizedBox(width: 8),
-                        Text(
-                          'Θα κάψεις ~ $calculatedCalories kcal',
-                          style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.orange),
+                    const SizedBox(height: 20),
+                    if (!_openedFromCalendar || _isCalendarFuture) ...[
+                      Text(
+                        'Ημερομηνία πλάνου',
+                        style: TextStyle(
+                          color: slateGrey,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      OutlinedButton.icon(
+                        onPressed: _openedFromCalendar
+                            ? null
+                            : () async {
+                                final picked = await showDatePicker(
+                                  context: context,
+                                  initialDate: selectedPlanDate,
+                                  firstDate: DateTime.now(),
+                                  lastDate: DateTime.now().add(
+                                    const Duration(days: 365),
+                                  ),
+                                );
+                                if (picked != null) {
+                                  setState(() {
+                                    selectedPlanDate = picked;
+                                    recurrenceWeekday = picked.weekday;
+                                  });
+                                }
+                              },
+                        icon: const Icon(Icons.event),
+                        label: Text(_displayDate(selectedPlanDate)),
+                      ),
+                      const SizedBox(height: 18),
+                      Text(
+                        'Επανάληψη',
+                        style: TextStyle(
+                          color: slateGrey,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      DropdownButtonFormField<String>(
+                        initialValue: recurrenceType,
+                        decoration: const InputDecoration(
+                          border: OutlineInputBorder(),
+                        ),
+                        items: const [
+                          DropdownMenuItem(
+                            value: 'once',
+                            child: Text('Μία φορά'),
+                          ),
+                          DropdownMenuItem(
+                            value: 'daily',
+                            child: Text('Κάθε μέρα'),
+                          ),
+                          DropdownMenuItem(
+                            value: 'weekly',
+                            child: Text('Εβδομαδιαία'),
+                          ),
+                        ],
+                        onChanged: (value) {
+                          if (value == null) return;
+                          setState(() => recurrenceType = value);
+                        },
+                      ),
+                      if (recurrenceType == 'weekly') ...[
+                        const SizedBox(height: 10),
+                        DropdownButtonFormField<int>(
+                          key: ValueKey(recurrenceWeekday),
+                          initialValue: recurrenceWeekday,
+                          decoration: const InputDecoration(
+                            border: OutlineInputBorder(),
+                          ),
+                          items: List.generate(7, (index) {
+                            final weekday = index + 1;
+                            return DropdownMenuItem(
+                              value: weekday,
+                              child: Text(_weekdayLabel(weekday)),
+                            );
+                          }),
+                          onChanged: (value) {
+                            if (value == null) return;
+                            setState(() => recurrenceWeekday = value);
+                          },
                         ),
                       ],
+                      const SizedBox(height: 18),
+                    ],
+                    Text(
+                      'Επίλεξε διάρκεια: $selectedMinutes λεπτά',
+                      style: TextStyle(
+                        color: slateGrey,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
-                  ),
-                ],
+                    Slider(
+                      value: selectedMinutes.toDouble(),
+                      min: 10,
+                      max: 120,
+                      divisions: 11,
+                      activeColor: sageGreen,
+                      inactiveColor: sageGreen.withValues(alpha: 0.3),
+                      onChanged: (val) {
+                        setState(() {
+                          selectedMinutes = val.toInt();
+                          calculatedCalories =
+                              ((baseCalories / baseDuration) * selectedMinutes)
+                                  .round();
+                        });
+                      },
+                    ),
+                    const SizedBox(height: 15),
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.orange.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(
+                          color: Colors.orange.withValues(alpha: 0.5),
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(
+                            Icons.local_fire_department,
+                            color: Colors.orange,
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            'Θα κάψεις ~ $calculatedCalories kcal',
+                            style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: Colors.orange,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
               ),
               actions: [
                 TextButton(
                   onPressed: () => Navigator.pop(context),
-                  child: const Text('ΑΚΥΡΩΣΗ', style: TextStyle(color: Colors.grey, fontWeight: FontWeight.bold)),
+                  child: const Text(
+                    'ΑΚΥΡΩΣΗ',
+                    style: TextStyle(
+                      color: Colors.grey,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
                 ),
                 ElevatedButton(
                   style: ElevatedButton.styleFrom(
                     backgroundColor: sageGreen,
                     foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
                   ),
                   onPressed: () async {
                     final user = FirebaseAuth.instance.currentUser;
                     if (user != null) {
                       try {
-                        await FirebaseFirestore.instance
-                            .collection('users')
-                            .doc(user.uid)
-                            .collection('my_plan')
-                            .add({
-                          'programName': programData['name'],
-                          'category': programData['category'],
-                          'durationMinutes': selectedMinutes,
-                          'expectedCalories': calculatedCalories,
-                          'addedAt': FieldValue.serverTimestamp(),
-                          'status': 'Εκκρεμεί', 
-                        });
-                        
+                        if (_openedFromCalendar && !_isCalendarFuture) {
+                          await FirebaseFirestore.instance
+                              .collection('users')
+                              .doc(user.uid)
+                              .collection('diary')
+                              .doc(widget.calendarDateString)
+                              .set({
+                                'entries': FieldValue.arrayUnion([
+                                  {
+                                    'name': programData['name'],
+                                    'category': 'Άσκηση',
+                                    'isExercise': true,
+                                    'calories': calculatedCalories,
+                                    'quantity': selectedMinutes,
+                                    'unit': 'λεπτά',
+                                    'loggedAt': Timestamp.now(),
+                                    'imageUrl': programData['imageUrl'] ?? '',
+                                  },
+                                ]),
+                              }, SetOptions(merge: true));
+                        } else {
+                          await FirebaseFirestore.instance
+                              .collection('users')
+                              .doc(user.uid)
+                              .collection('my_plan')
+                              .add({
+                                'programName': programData['name'],
+                                'category': programData['category'],
+                                'durationMinutes': selectedMinutes,
+                                'expectedCalories': calculatedCalories,
+                                'plannedDateString': _dateString(
+                                  selectedPlanDate,
+                                ),
+                                'plannedDate': Timestamp.fromDate(
+                                  selectedPlanDate,
+                                ),
+                                'recurrenceType': recurrenceType,
+                                'recurrenceWeekday': recurrenceWeekday,
+                                'addedAt': FieldValue.serverTimestamp(),
+                                'status': 'Προγραμματισμένο',
+                              });
+                        }
+
                         if (!context.mounted) return;
-                          Navigator.pop(context, true); 
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: const Text('Επιτυχής προσθήκη στο προσωπικό πλάνο!'),
-                              backgroundColor: sageGreen,
-                              behavior: SnackBarBehavior.floating,
+                        Navigator.pop(context, true);
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(
+                              _openedFromCalendar && !_isCalendarFuture
+                                  ? 'Η άσκηση καταγράφηκε στο ημερολόγιο!'
+                                  : 'Επιτυχής προσθήκη στο προσωπικό πλάνο!',
                             ),
-                          );
-                        
+                            backgroundColor: sageGreen,
+                            behavior: SnackBarBehavior.floating,
+                          ),
+                        );
                       } catch (e) {
-                        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Σφάλμα αποθήκευσης: $e')));
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text('Σφάλμα αποθήκευσης: $e')),
+                        );
                       }
                     }
                   },
-                  child: const Text('ΕΠΙΒΕΒΑΙΩΣΗ', style: TextStyle(fontWeight: FontWeight.bold)),
+                  child: const Text(
+                    'ΕΠΙΒΕΒΑΙΩΣΗ',
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
                 ),
               ],
             );
@@ -246,24 +470,40 @@ class _FitnessProgramsScreenState extends State<FitnessProgramsScreen> {
   }
 
   Future<void> _deleteMyProgram(String programId) async {
-    bool confirm = await showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Διαγραφή'),
-        content: const Text('Θέλετε να διαγράψετε το πρόγραμμά σας;'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('ΑΚΥΡΩΣΗ')),
-          TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('ΔΙΑΓΡΑΦΗ', style: TextStyle(color: Colors.red))),
-        ],
-      ),
-    ) ?? false;
-    if (confirm) await FirebaseFirestore.instance.collection('fitness_programs').doc(programId).delete();
+    bool confirm =
+        await showDialog(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('Διαγραφή'),
+            content: const Text('Θέλετε να διαγράψετε το πρόγραμμά σας;'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('ΑΚΥΡΩΣΗ'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.pop(context, true),
+                child: const Text(
+                  'ΔΙΑΓΡΑΦΗ',
+                  style: TextStyle(color: Colors.red),
+                ),
+              ),
+            ],
+          ),
+        ) ??
+        false;
+    if (confirm) {
+      await FirebaseFirestore.instance
+          .collection('fitness_programs')
+          .doc(programId)
+          .delete();
+    }
   }
-
 
   @override
   Widget build(BuildContext context) {
-    bool hasQuiz = userData != null && userData!.containsKey('fitnessPreferences');
+    bool hasQuiz =
+        userData != null && userData!.containsKey('fitnessPreferences');
 
     return Scaffold(
       appBar: AppBar(
@@ -273,7 +513,7 @@ class _FitnessProgramsScreenState extends State<FitnessProgramsScreen> {
             IconButton(
               icon: const Icon(Icons.psychology_alt),
               tooltip: 'Βρες τι σου ταιριάζει',
-              onPressed: () => _showQuiz()
+              onPressed: () => _showQuiz(),
             )
           else ...[
             IconButton(
@@ -291,16 +531,29 @@ class _FitnessProgramsScreenState extends State<FitnessProgramsScreen> {
       ),
       floatingActionButton: FloatingActionButton(
         backgroundColor: sageGreen,
-        onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => AddFitnessProgramScreen(isAdmin: isAdmin))),
+        onPressed: () => Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => AddFitnessProgramScreen(isAdmin: isAdmin),
+          ),
+        ),
         child: const Icon(Icons.add, color: Colors.white),
       ),
       body: isLoadingUser
           ? Center(child: CircularProgressIndicator(color: sageGreen))
           : StreamBuilder<QuerySnapshot>(
-              stream: FirebaseFirestore.instance.collection('fitness_programs').snapshots(),
+              stream: FirebaseFirestore.instance
+                  .collection('fitness_programs')
+                  .snapshots(),
               builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) return Center(child: CircularProgressIndicator(color: sageGreen));
-                if (!snapshot.hasData || snapshot.data!.docs.isEmpty) return const Center(child: Text('Δεν βρέθηκαν προγράμματα.'));
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return Center(
+                    child: CircularProgressIndicator(color: sageGreen),
+                  );
+                }
+                if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+                  return const Center(child: Text('Δεν βρέθηκαν προγράμματα.'));
+                }
 
                 List<QueryDocumentSnapshot> allDocs = snapshot.data!.docs;
                 List<QueryDocumentSnapshot> finalDocs = [];
@@ -314,30 +567,38 @@ class _FitnessProgramsScreenState extends State<FitnessProgramsScreen> {
 
                   for (var doc in allDocs) {
                     final data = doc.data() as Map<String, dynamic>;
-                    
+
                     int score = SmartInsightsService.calculateProgramScore(
-                      programData: data, 
-                      userPreferences: _currentPreferences, 
-                      userData: userData
+                      programData: data,
+                      userPreferences: _currentPreferences,
+                      userData: userData,
                     );
-                    
+
                     scoredPrograms.add({'doc': doc, 'score': score});
                   }
 
-                  scoredPrograms.sort((a, b) => (b['score'] as int).compareTo(a['score'] as int));
-                  
-                  var topPrograms = scoredPrograms.where((p) => (p['score'] as int) > 2).toList();
+                  scoredPrograms.sort(
+                    (a, b) => (b['score'] as int).compareTo(a['score'] as int),
+                  );
+
+                  var topPrograms = scoredPrograms
+                      .where((p) => (p['score'] as int) > 2)
+                      .toList();
 
                   if (topPrograms.isEmpty) {
-                    noExactMatch = true; 
-                    finalDocs = scoredPrograms.take(3).map((p) => p['doc'] as QueryDocumentSnapshot).toList();
+                    noExactMatch = true;
+                    finalDocs = scoredPrograms
+                        .map((p) => p['doc'] as QueryDocumentSnapshot)
+                        .toList();
                   } else {
-                    finalDocs = topPrograms.take(4).map((p) => p['doc'] as QueryDocumentSnapshot).toList();
+                    finalDocs = scoredPrograms
+                        .map((p) => p['doc'] as QueryDocumentSnapshot)
+                        .toList();
                   }
 
                   activeInsights = SmartInsightsService.generateSmartInsights(
-                    noExactMatch: noExactMatch, 
-                    userData: userData
+                    noExactMatch: noExactMatch,
+                    userData: userData,
                   );
                 }
 
@@ -347,21 +608,43 @@ class _FitnessProgramsScreenState extends State<FitnessProgramsScreen> {
                       Container(
                         margin: const EdgeInsets.all(16),
                         padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(color: sageGreen.withValues(alpha: 0.15), border: Border.all(color: sageGreen.withValues(alpha: 0.5)), borderRadius: BorderRadius.circular(15)),
+                        decoration: BoxDecoration(
+                          color: sageGreen.withValues(alpha: 0.15),
+                          border: Border.all(
+                            color: sageGreen.withValues(alpha: 0.5),
+                          ),
+                          borderRadius: BorderRadius.circular(15),
+                        ),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Row(children: [
-                              Icon(Icons.auto_awesome, color: sageGreen), 
-                              const SizedBox(width: 8), 
-                              Text('Γιατί σας προτείνουμε αυτά;', style: TextStyle(fontWeight: FontWeight.bold, color: slateGrey))
-                            ]),
+                            Row(
+                              children: [
+                                Icon(Icons.auto_awesome, color: sageGreen),
+                                const SizedBox(width: 8),
+                                Text(
+                                  'Γιατί σας προτείνουμε αυτά;',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    color: slateGrey,
+                                  ),
+                                ),
+                              ],
+                            ),
                             const SizedBox(height: 10),
-                            ...activeInsights.map((insight) => Padding(padding: const EdgeInsets.only(bottom: 6), child: Text(insight, style: const TextStyle(fontSize: 13)))),
+                            ...activeInsights.map(
+                              (insight) => Padding(
+                                padding: const EdgeInsets.only(bottom: 6),
+                                child: Text(
+                                  insight,
+                                  style: const TextStyle(fontSize: 13),
+                                ),
+                              ),
+                            ),
                           ],
                         ),
                       ),
-                    
+
                     Expanded(
                       child: ListView.builder(
                         padding: const EdgeInsets.all(16),
@@ -369,7 +652,8 @@ class _FitnessProgramsScreenState extends State<FitnessProgramsScreen> {
                         itemBuilder: (context, index) {
                           final doc = finalDocs[index];
                           final data = doc.data() as Map<String, dynamic>;
-                          final isMyProgram = data['createdBy'] == currentUserId;
+                          final isMyProgram =
+                              data['createdBy'] == currentUserId;
                           final canEditOrDelete = isMyProgram || isAdmin;
 
                           return Card(
@@ -380,24 +664,102 @@ class _FitnessProgramsScreenState extends State<FitnessProgramsScreen> {
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Row(
-                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                    mainAxisAlignment:
+                                        MainAxisAlignment.spaceBetween,
                                     children: [
-                                      Expanded(child: Text(data['name'] ?? '', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: slateGrey))),
-                                      
+                                      Expanded(
+                                        child: Text(
+                                          data['name'] ?? '',
+                                          style: TextStyle(
+                                            fontSize: 18,
+                                            fontWeight: FontWeight.bold,
+                                            color: slateGrey,
+                                          ),
+                                        ),
+                                      ),
+
                                       if (canEditOrDelete)
-                                        Row(mainAxisSize: MainAxisSize.min, children: [
-                                          IconButton(icon: const Icon(Icons.edit_outlined, color: Colors.blue, size: 20), onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => AddFitnessProgramScreen(isAdmin: false, programData: data, programId: doc.id)))),
-                                          IconButton(icon: const Icon(Icons.delete_outline, color: Colors.red, size: 20), onPressed: () => _deleteMyProgram(doc.id)),
-                                        ]),
-                                      Chip(label: Text(data['category'] ?? '', style: const TextStyle(fontSize: 11, color: Colors.white)), backgroundColor: sageGreen),
+                                        Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            IconButton(
+                                              icon: const Icon(
+                                                Icons.edit_outlined,
+                                                color: Colors.blue,
+                                                size: 20,
+                                              ),
+                                              onPressed: () => Navigator.push(
+                                                context,
+                                                MaterialPageRoute(
+                                                  builder: (context) =>
+                                                      AddFitnessProgramScreen(
+                                                        isAdmin: false,
+                                                        programData: data,
+                                                        programId: doc.id,
+                                                      ),
+                                                ),
+                                              ),
+                                            ),
+                                            IconButton(
+                                              icon: const Icon(
+                                                Icons.delete_outline,
+                                                color: Colors.red,
+                                                size: 20,
+                                              ),
+                                              onPressed: () =>
+                                                  _deleteMyProgram(doc.id),
+                                            ),
+                                          ],
+                                        ),
+                                      Chip(
+                                        label: Text(
+                                          data['category'] ?? '',
+                                          style: const TextStyle(
+                                            fontSize: 11,
+                                            color: Colors.white,
+                                          ),
+                                        ),
+                                        backgroundColor: sageGreen,
+                                      ),
                                     ],
                                   ),
                                   const SizedBox(height: 8),
-                                  Text('${data['location']} • ${data['duration']} • ${data['intensity']}', style: TextStyle(color: Colors.grey.shade600)),
-                                  if (data['description'] != null) Padding(padding: const EdgeInsets.only(top: 8), child: Text(data['description'], style: const TextStyle(fontStyle: FontStyle.italic))),
-                                  if (data['estimatedCalories'] != null) Padding(padding: const EdgeInsets.only(top: 8), child: Text('🔥 ~${data['estimatedCalories']} kcal', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.redAccent))),
+                                  Text(
+                                    '${data['location']} • ${data['duration']} • ${data['intensity']}',
+                                    style: TextStyle(
+                                      color: Colors.grey.shade600,
+                                    ),
+                                  ),
+                                  if (data['description'] != null)
+                                    Padding(
+                                      padding: const EdgeInsets.only(top: 8),
+                                      child: Text(
+                                        data['description'],
+                                        style: const TextStyle(
+                                          fontStyle: FontStyle.italic,
+                                        ),
+                                      ),
+                                    ),
+                                  if (data['estimatedCalories'] != null)
+                                    Padding(
+                                      padding: const EdgeInsets.only(top: 8),
+                                      child: Text(
+                                        '🔥 ~${data['estimatedCalories']} kcal',
+                                        style: const TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          color: Colors.redAccent,
+                                        ),
+                                      ),
+                                    ),
                                   const SizedBox(height: 12),
-                                  ElevatedButton(onPressed: () => _addToPlan(data), child: const Text('Προσθήκη στο Πλάνο')),
+                                  ElevatedButton(
+                                    onPressed: () => _addToPlan(data),
+                                    child: Text(
+                                      _openedFromCalendar && !_isCalendarFuture
+                                          ? 'Καταγραφή Άσκησης'
+                                          : 'Προσθήκη στο Πλάνο',
+                                    ),
+                                  ),
                                 ],
                               ),
                             ),
