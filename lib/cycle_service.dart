@@ -28,31 +28,29 @@ class CycleService {
     final user = _auth.currentUser;
     if (user == null) return;
 
-    DateTime nextPeriodPredicted = lastPeriodStart.add(
-      Duration(days: cycleLength),
-    );
+    DateTime nextPeriodPredicted = lastPeriodStart.add(Duration(days: cycleLength));
+    DateTime ovulationDate = nextPeriodPredicted.subtract(const Duration(days: 14));
+    DateTime fertilityStart = ovulationDate.subtract(const Duration(days: 5));
+    DateTime fertilityEnd = ovulationDate.add(const Duration(days: 1));
 
-    await _db
-        .collection('users')
-        .doc(user.uid)
-        .collection('cycleProfile')
-        .doc('settings')
-        .set({
-          'lastPeriodStart': lastPeriodStart,
-          'cycleLength': cycleLength,
-          'periodDuration': periodDuration,
-          'nextPeriodPredicted': nextPeriodPredicted,
-          'fertilityWindowStart': nextPeriodPredicted
-              .subtract(const Duration(days: 14))
-              .subtract(const Duration(days: 5)),
-          'fertilityWindowEnd': nextPeriodPredicted
-              .subtract(const Duration(days: 14))
-              .add(const Duration(days: 1)),
-          'regularity': regularity,
-          'typicalSymptoms': typicalSymptoms,
-          'usesDefaultSettings': usesDefaultSettings,
-          'createdAt': FieldValue.serverTimestamp(),
-        });
+    await _db.collection('users').doc(user.uid).collection('cycleProfile').doc('settings').set({
+      'lastPeriodStart': lastPeriodStart,
+      'cycleLength': cycleLength,
+      'periodDuration': periodDuration,
+      'nextPeriodPredicted': nextPeriodPredicted,
+      'fertilityWindowStart': fertilityStart,
+      'fertilityWindowEnd': fertilityEnd,
+      'regularity': regularity,
+      'typicalSymptoms': typicalSymptoms,
+      'usesDefaultSettings': usesDefaultSettings,
+      'createdAt': FieldValue.serverTimestamp(),
+    });
+  }
+
+  Future<void> markProfileAsUsingDefaultSettings() async {
+    final user = _auth.currentUser;
+    if (user == null) return;
+    await _db.collection('users').doc(user.uid).collection('cycleProfile').doc('settings').update({'usesDefaultSettings': true});
   }
 
   Future<void> logCycleEntry({
@@ -72,10 +70,7 @@ class CycleService {
     final historyRef = settingsRef.collection('cycleHistory').doc();
     
     final latestPreviousEntry = await settingsRef.collection('cycleHistory')
-        .where('entryDate', isLessThan: entryDate)
-        .orderBy('entryDate', descending: true)
-        .limit(1)
-        .get();
+        .where('entryDate', isLessThan: entryDate).orderBy('entryDate', descending: true).limit(1).get();
 
     final previousData = latestPreviousEntry.docs.isEmpty ? null : latestPreviousEntry.docs.first.data();
     final previousEntryDate = (previousData?['entryDate'] as Timestamp?)?.toDate();
@@ -86,7 +81,6 @@ class CycleService {
     final currentHasFlow = _hasRecordedFlow(flowIntensity);
     
     final startsNewCycle = isPeriodStart; 
-    
     final endsCurrentPeriod = !currentHasFlow && hadFlowPreviousDay && !startsNewCycle;
     
     final effectiveLastPeriodStart = startsNewCycle ? entryDate : (currentLastPeriodStart ?? entryDate);
@@ -139,6 +133,7 @@ class CycleService {
       settingsUpdate['lastPeriodStart'] = entryDate;
       settingsUpdate['lastPeriodEnd'] = null; 
       settingsUpdate['periodDuration'] = effectivePeriodDuration; 
+      settingsUpdate['cycleLength'] = cycleLength; 
       
       if (currentLastPeriodStart != null && !_isSameDay(entryDate, currentLastPeriodStart)) {
         settingsUpdate['pastPeriods'] = FieldValue.arrayUnion([
@@ -159,62 +154,20 @@ class CycleService {
     await batch.commit();
   }
 
-  Future<void> markProfileAsUsingDefaultSettings() async {
-    final user = _auth.currentUser;
-    if (user == null) return;
-    await _db.collection('users').doc(user.uid).collection('cycleProfile').doc('settings').update({'usesDefaultSettings': true});
-  }
+  bool _hasRecordedFlow(String? flowIntensity) => flowIntensity != null && flowIntensity.isNotEmpty && flowIntensity != 'Καμία ροή';
 
-
-  bool _hasRecordedFlow(String? flowIntensity) {
-    return flowIntensity != null && flowIntensity.isNotEmpty && flowIntensity != 'Καμία ροή';
-  }
-
-  String _buildRecommendation({
-    required String flowIntensity,
-    required List<String> symptoms,
-    required String mood,
-  }) {
+  String _buildRecommendation({required String flowIntensity, required List<String> symptoms, required String mood}) {
     List<String> tips = [];
-
-    if (flowIntensity == 'Βαριά') {
-      tips.add('🩸 Έντονη Ροή: Φροντίστε να καταναλώνετε τροφές πλούσιες σε σίδηρο, πίνετε άφθονο νερό και δώστε χρόνο στο σώμα σας να ξεκουραστεί.');
-    } else if (flowIntensity == 'Καμία ροή') {
-      return 'Η περίοδός σας φαίνεται να ολοκληρώθηκε. Μην ξεχνάτε να καταγράφετε καθημερινά τη διάθεσή σας!';
-    }
-
-    if (symptoms.contains('Κράμπες') || symptoms.contains('Πόνος στη μέση')) {
-      tips.add('🧘‍♀️ Πόνος & Κράμπες: Μια θερμοφόρα στην κοιλιά ή στη μέση, σε συνδυασμό με ένα ζεστό χαμομήλι και ήπιες διατάσεις, μπορεί να ανακουφίσει τον πόνο.');
-    }
-    
-    if (symptoms.contains('Ατονία') || symptoms.contains('Κόπωση')) {
-      tips.add('😴 Κόπωση: Το σώμα σας ζητάει ενέργεια. Αποφύγετε την έντονη γυμναστική σήμερα και προσπαθήστε να κοιμηθείτε τουλάχιστον 8 ώρες.');
-    }
-
-    if (symptoms.contains('Πονοκέφαλος')) {
-      tips.add('💧 Πονοκέφαλος: Η καλή ενυδάτωση και η μείωση της έκθεσης σε οθόνες μπορούν να βοηθήσουν στην αντιμετώπιση του πονοκεφάλου.');
-    }
-    
-    if (symptoms.contains('Φούσκωμα')) {
-      tips.add('🎈 Φούσκωμα: Προσπαθήστε να μειώσετε το αλάτι στα γεύματά σας σήμερα και προτιμήστε τροφές πλούσιες σε κάλιο, όπως η μπανάνα.');
-    }
-
-    if (mood == 'Κακή' || symptoms.contains('Αλλαγές Διάθεσης')) {
-      tips.add('🍫 Διάθεση: Είναι απόλυτα φυσιολογικό να νιώθετε πεσμένη λόγω των ορμονών. Λίγη μαύρη σοκολάτα ή μια βόλτα στον καθαρό αέρα ίσως σας φτιάξουν τη μέρα.');
-    }
-
-    if (tips.isEmpty) {
-      return '💡 Η καταγραφή σας αποθηκεύτηκε επιτυχώς! Συνεχίστε την καθημερινή παρακολούθηση για να γνωρίσετε καλύτερα το σώμα σας.';
-    }
-
-    return tips.join('\n\n');
+    if (flowIntensity == 'Βαριά') tips.add('🩸 Έντονη Ροή: Φροντίστε να καταναλώνετε τροφές πλούσιες σε σίδηρο και ξεκουραστείτε.');
+    else if (flowIntensity == 'Καμία ροή') return 'Η περίοδός σας φαίνεται να ολοκληρώθηκε. Μην ξεχνάτε να καταγράφετε καθημερινά τη διάθεσή σας!';
+    if (symptoms.contains('Κράμπες') || symptoms.contains('Πόνος στη μέση')) tips.add('🧘‍♀️ Πόνος & Κράμπες: Μια θερμοφόρα μπορεί να ανακουφίσει τον πόνο.');
+    if (symptoms.contains('Ατονία') || symptoms.contains('Κόπωση')) tips.add('😴 Κόπωση: Αποφύγετε την έντονη γυμναστική σήμερα και κοιμηθείτε καλά.');
+    if (symptoms.contains('Πονοκέφαλος')) tips.add('💧 Πονοκέφαλος: Η καλή ενυδάτωση μπορεί να βοηθήσει.');
+    if (symptoms.contains('Φούσκωμα')) tips.add('🎈 Φούσκωμα: Μειώστε το αλάτι στα γεύματά σας σήμερα.');
+    if (mood == 'Κακή' || symptoms.contains('Αλλαγές Διάθεσης')) tips.add('🍫 Διάθεση: Λίγη μαύρη σοκολάτα ίσως σας φτιάξει τη μέρα.');
+    return tips.isEmpty ? '💡 Η καταγραφή σας αποθηκεύτηκε επιτυχώς!' : tips.join('\n\n');
   }
 
-  DateTime _dateOnly(DateTime date) {
-    return DateTime(date.year, date.month, date.day);
-  }
-
-  bool _isSameDay(DateTime first, DateTime second) {
-    return first.year == second.year && first.month == second.month && first.day == second.day;
-  }
+  DateTime _dateOnly(DateTime date) => DateTime(date.year, date.month, date.day);
+  bool _isSameDay(DateTime first, DateTime second) => first.year == second.year && first.month == second.month && first.day == second.day;
 }
