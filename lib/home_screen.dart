@@ -11,6 +11,7 @@ import 'cooking_book_screen.dart';
 import 'fitness_programs_screen.dart';
 import 'super_market_list_screen.dart';
 import 'fitness_screen.dart';
+import 'calendar_screen.dart';
 
 
 class HomeScreen extends StatefulWidget {
@@ -33,16 +34,6 @@ class _HomeScreenState extends State<HomeScreen> {
     _fetchUsername();
   }
 
-  void _showComingSoon(String featureName) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('Η λειτουργία "$featureName" θα είναι σύντομα διαθέσιμη! 🚀'),
-        backgroundColor: sageGreen,
-        duration: const Duration(seconds: 2),
-      ),
-    );
-  }
-
   Future<void> _fetchUsername() async {
     final user = FirebaseAuth.instance.currentUser;
     if (user != null) {
@@ -55,7 +46,8 @@ class _HomeScreenState extends State<HomeScreen> {
         if (mounted) {
           setState(() {
             if (doc.exists && doc.data() != null) {
-              username = (doc.data() as Map<String, dynamic>)['username'] ?? "User";
+              username =
+                  (doc.data() as Map<String, dynamic>)['username'] ?? "User";
             }
             isLoadingUsername = false;
           });
@@ -84,7 +76,6 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  // Λειτουργία για το μενού των συνταγών
   void _showRecipesModal(BuildContext context) {
     showModalBottomSheet(
       context: context,
@@ -123,7 +114,7 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
               title: const Text('Αναζήτηση Συνταγών'),
               onTap: () {
-                Navigator.pop(context); 
+                Navigator.pop(context);
                 Navigator.push(
                   context,
                   MaterialPageRoute(
@@ -139,7 +130,7 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
               title: const Text('Δημιουργία Νέας Συνταγής'),
               onTap: () {
-                Navigator.pop(context); 
+                Navigator.pop(context);
                 Navigator.push(
                   context,
                   MaterialPageRoute(
@@ -161,7 +152,7 @@ class _HomeScreenState extends State<HomeScreen> {
     final List<String> adminEmails = [
       'avramargeti@gmail.com',
       'bokosdimitris@gmail.com',
-      'adonopoulouifigeneia@icloud.com'
+      'adonopoulouifigeneia@icloud.com',
     ];
     final isAdmin =
         currentUser != null && adminEmails.contains(currentUser.email);
@@ -175,11 +166,13 @@ class _HomeScreenState extends State<HomeScreen> {
             icon: const Icon(Icons.menu_book),
             tooltip: 'My Cooking Book',
             onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (context) => const CookingBookScreen()),
-                );
-              },
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const CookingBookScreen(),
+                ),
+              );
+            },
           ),
           IconButton(
             icon: const Icon(Icons.logout),
@@ -269,7 +262,6 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
             const SizedBox(height: 20),
 
-            // --- ΝΕΟ ΚΟΥΜΠΙ: ΛΙΣΤΑ SUPER MARKET ---
             _buildDashboardButton(
               context,
               title: 'ΛΙΣΤΑ SUPER MARKET',
@@ -278,12 +270,14 @@ class _HomeScreenState extends State<HomeScreen> {
               onTap: () {
                 Navigator.push(
                   context,
-                  MaterialPageRoute(builder: (context) => const SuperMarketListScreen()),
+                  MaterialPageRoute(
+                    builder: (context) => const SuperMarketListScreen(),
+                  ),
                 );
               },
             ),
             const SizedBox(height: 20),
-            
+
             _buildDashboardButton(
               context,
               title: 'FITNESS',
@@ -292,19 +286,28 @@ class _HomeScreenState extends State<HomeScreen> {
               onTap: () {
                 Navigator.push(
                   context,
-                  MaterialPageRoute(builder: (context) => const FitnessScreen()),
+                  MaterialPageRoute(
+                    builder: (context) => const FitnessScreen(),
+                  ),
                 );
-              }
+              },
             ),
-            
+
             const SizedBox(height: 20),
             _buildDashboardButton(
               context,
-              title: 'ΤΟ ΠΛΑΝΟ ΜΟΥ',
+              title: 'ΗΜΕΡΟΛΟΓΙΟ',
               icon: Icons.calendar_today,
               color: slateGrey,
               isOutlined: true,
-              onTap: () => _showComingSoon("Το Πλάνο Μου"),
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const CalendarScreen(),
+                  ),
+                );
+              },
             ),
 
             if (isAdmin) ...[
@@ -401,7 +404,10 @@ class _HomeScreenState extends State<HomeScreen> {
               onPressed: onTap,
               label: Text(
                 title,
-                style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
+                style: const TextStyle(
+                  fontSize: 17,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
             )
           : ElevatedButton.icon(
@@ -418,7 +424,10 @@ class _HomeScreenState extends State<HomeScreen> {
               onPressed: onTap,
               label: Text(
                 title,
-                style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
+                style: const TextStyle(
+                  fontSize: 17,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
             ),
     );

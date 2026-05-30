@@ -1,12 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:intl/date_symbol_data_local.dart';
+
 import 'firebase_options.dart';
 import 'auth_screen.dart';
 import 'home_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  await initializeDateFormatting('el', null);
+  
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
@@ -26,6 +32,18 @@ class NutriFitApp extends StatelessWidget {
     return MaterialApp(
       title: 'NutriFit',
       debugShowCheckedModeBanner: false,
+  
+      localizationsDelegates: const [
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
+      supportedLocales: const [
+        Locale('el', 'GR'), 
+        Locale('en', 'US'), 
+      ],
+      locale: const Locale('el', 'GR'), 
+
       theme: ThemeData(
         useMaterial3: true,
         scaffoldBackgroundColor: beigeBackground,
