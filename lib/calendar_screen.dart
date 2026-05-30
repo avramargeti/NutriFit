@@ -94,6 +94,53 @@ class _CalendarScreenState extends State<CalendarScreen> {
     return entries.fold(0, (total, entry) => total + _asInt(entry['calories']));
   }
 
+  double _calorieProgress(int netCalories, int targetCalories) {
+    if (targetCalories <= 0) return 0;
+    return (netCalories / targetCalories).clamp(0.0, 1.25);
+  }
+
+  Color _goalColor(int netCalories, int targetCalories) {
+    if (targetCalories <= 0) return slateGrey;
+    final ratio = netCalories / targetCalories;
+    if (ratio >= 1.05) return Colors.redAccent;
+    if (ratio >= 0.85) return Colors.orangeAccent;
+    return sageGreen;
+  }
+
+  String _goalStatus(int netCalories, int targetCalories) {
+    if (targetCalories <= 0) return 'Δεν έχει οριστεί θερμιδικός στόχος';
+    final remaining = targetCalories - netCalories;
+    final ratio = netCalories / targetCalories;
+
+    if (ratio >= 1.05) {
+      return 'Ξεπέρασες τον στόχο κατά ${remaining.abs()} kcal';
+    }
+    if (remaining <= 0) return 'Έφτασες τον σημερινό στόχο';
+    if (ratio >= 0.85) return 'Πλησιάζεις, απομένουν $remaining kcal';
+    return 'Απομένουν $remaining kcal για τον στόχο';
+  }
+
+  String _goalMessage(int netCalories, int targetCalories) {
+    if (targetCalories <= 0) {
+      return 'Όρισε στόχους για να βλέπεις την καθημερινή σου πορεία.';
+    }
+
+    final ratio = netCalories / targetCalories;
+    if (ratio >= 1.05) {
+      return 'Μια μέρα δεν χαλάει την προσπάθεια. Συνέχισε με ηρεμία και επίγνωση.';
+    }
+    if (ratio >= 0.95) {
+      return 'Είσαι ακριβώς εκεί που πρέπει. Πολύ δυνατή συνέπεια σήμερα.';
+    }
+    if (ratio >= 0.85) {
+      return 'Είσαι πολύ κοντά. Μικρές σωστές επιλογές κάνουν τη διαφορά.';
+    }
+    if (ratio >= 0.5) {
+      return 'Ωραία πορεία μέχρι τώρα. Κράτα ρυθμό και άκου το σώμα σου.';
+    }
+    return 'Η μέρα χτίζεται βήμα βήμα. Ξεκίνα απλά και με πρόθεση.';
+  }
+
   bool _isToday() {
     final now = DateTime.now();
     return _selectedDate.year == now.year &&
@@ -551,6 +598,25 @@ class _CalendarScreenState extends State<CalendarScreen> {
                               ],
                             ),
                           ),
+                          StreamBuilder<DocumentSnapshot>(
+                            stream: FirebaseFirestore.instance
+                                .collection('users')
+                                .doc(user.uid)
+                                .snapshots(),
+                            builder: (context, userSnapshot) {
+                              final userData =
+                                  userSnapshot.data?.data()
+                                      as Map<String, dynamic>?;
+                              final targetCalories = _asInt(
+                                userData?['targetCalories'],
+                              );
+
+                              return _buildCalorieGoalCard(
+                                netCalories,
+                                targetCalories,
+                              );
+                            },
+                          ),
 
                           Expanded(
                             child: ListView(
@@ -635,6 +701,95 @@ class _CalendarScreenState extends State<CalendarScreen> {
           style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
         ),
       ],
+    );
+  }
+
+  Widget _buildCalorieGoalCard(int netCalories, int targetCalories) {
+    final color = _goalColor(netCalories, targetCalories);
+    final progress = _calorieProgress(netCalories, targetCalories);
+    final remaining = targetCalories - netCalories;
+
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: color.withValues(alpha: 0.25)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.04),
+            blurRadius: 10,
+            spreadRadius: 1,
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.flag_circle_outlined, color: color),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Θερμιδικός στόχος',
+                  style: TextStyle(
+                    color: slateGrey,
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+              Text(
+                targetCalories > 0 ? '$targetCalories kcal' : '-',
+                style: TextStyle(
+                  color: color,
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(99),
+            child: LinearProgressIndicator(
+              minHeight: 10,
+              value: progress.clamp(0.0, 1.0),
+              backgroundColor: Colors.grey.shade200,
+              valueColor: AlwaysStoppedAnimation<Color>(color),
+            ),
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Text(
+                '$netCalories kcal καθαρές',
+                style: const TextStyle(fontWeight: FontWeight.bold),
+              ),
+              const Spacer(),
+              if (targetCalories > 0)
+                Text(
+                  remaining >= 0
+                      ? '$remaining kcal ακόμα'
+                      : '+${remaining.abs()} kcal',
+                  style: TextStyle(color: color, fontWeight: FontWeight.bold),
+                ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            _goalStatus(netCalories, targetCalories),
+            style: TextStyle(color: color, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            _goalMessage(netCalories, targetCalories),
+            style: TextStyle(color: Colors.grey.shade700, height: 1.25),
+          ),
+        ],
+      ),
     );
   }
 
