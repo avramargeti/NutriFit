@@ -11,6 +11,7 @@ import 'cooking_book_screen.dart';
 import 'fitness_programs_screen.dart';
 import 'super_market_list_screen.dart';
 import 'fitness_screen.dart';
+import 'calendar_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -30,16 +31,6 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
     _fetchUsername();
-  }
-
-  void _showComingSoon(String featureName) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('Η λειτουργία "$featureName" θα είναι σύντομα διαθέσιμη! 🚀'),
-        backgroundColor: sageGreen,
-        duration: const Duration(seconds: 2),
-      ),
-    );
   }
 
   Future<void> _fetchUsername() async {
@@ -83,7 +74,6 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  // Λειτουργία για το μενού των συνταγών
   void _showRecipesModal(BuildContext context) {
     showModalBottomSheet(
       context: context,
@@ -267,7 +257,6 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
             const SizedBox(height: 20),
 
-            // --- ΝΕΟ ΚΟΥΜΠΙ: ΛΙΣΤΑ SUPER MARKET ---
             _buildDashboardButton(
               context,
               title: 'ΛΙΣΤΑ SUPER MARKET',
@@ -302,7 +291,12 @@ class _HomeScreenState extends State<HomeScreen> {
               icon: Icons.calendar_today,
               color: slateGrey,
               isOutlined: true,
-              onTap: () => _showComingSoon("Το Πλάνο Μου"),
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => const CalendarScreen()),
+                );
+              },
             ),
 
             if (isAdmin) ...[
