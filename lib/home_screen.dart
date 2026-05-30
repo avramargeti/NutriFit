@@ -11,6 +11,7 @@ import 'cooking_book_screen.dart';
 import 'fitness_programs_screen.dart';
 import 'super_market_list_screen.dart';
 import 'fitness_screen.dart';
+import 'cycle_screen.dart';
 
 
 class HomeScreen extends StatefulWidget {
@@ -22,6 +23,7 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   String username = "User";
+  String? userGender;
   bool isLoadingUsername = true;
 
   final Color sageGreen = const Color(0xFFA8B3A0);
@@ -55,7 +57,9 @@ class _HomeScreenState extends State<HomeScreen> {
         if (mounted) {
           setState(() {
             if (doc.exists && doc.data() != null) {
-              username = (doc.data() as Map<String, dynamic>)['username'] ?? "User";
+              var data = doc.data() as Map<String, dynamic>;
+              username = data['username'] ?? "User";
+              userGender = data['gender']; 
             }
             isLoadingUsername = false;
           });
@@ -296,7 +300,21 @@ class _HomeScreenState extends State<HomeScreen> {
                 );
               }
             ),
-            
+            if (userGender == 'Γυναίκα') ...[
+              const SizedBox(height: 20),
+              _buildDashboardButton(
+                context,
+                title: 'Ο ΚΥΚΛΟΣ ΜΟΥ',
+                icon: Icons.water_drop,
+                color: Colors.pink.shade300,
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (context) => const CycleScreen()),
+                  );
+                }
+              ),
+            ],
             const SizedBox(height: 20),
             _buildDashboardButton(
               context,

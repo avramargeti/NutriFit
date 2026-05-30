@@ -53,6 +53,33 @@ class CycleService {
     await _db.collection('users').doc(user.uid).collection('cycleProfile').doc('settings').update({'usesDefaultSettings': true});
   }
 
+  Future<DocumentSnapshot?> getEntryForDate(DateTime date) async {
+    final user = _auth.currentUser;
+    if (user == null) return null;
+
+    DateTime start = DateTime(date.year, date.month, date.day, 0, 0, 0);
+    DateTime end = DateTime(date.year, date.month, date.day, 23, 59, 59);
+
+    final snap = await _db.collection('users').doc(user.uid)
+        .collection('cycleProfile').doc('settings')
+        .collection('cycleHistory')
+        .where('entryDate', isGreaterThanOrEqualTo: start)
+        .where('entryDate', isLessThanOrEqualTo: end)
+        .limit(1).get();
+
+    return snap.docs.isNotEmpty ? snap.docs.first : null;
+  }
+
+  Future<void> deleteCycleEntry(String docId) async {
+    final user = _auth.currentUser;
+    if (user == null) return;
+
+    final settingsRef = _db.collection('users').doc(user.uid).collection('cycleProfile').doc('settings');
+    await settingsRef.collection('cycleHistory').doc(docId).delete();
+
+    await _recalculateProfile(user.uid, settingsRef);
+  }
+
   Future<void> logCycleEntry({
     required DateTime entryDate,
     required String flowIntensity,
@@ -62,12 +89,16 @@ class CycleService {
     required int cycleLength,
     required int periodDuration,
     required DateTime? currentLastPeriodStart,
+    String? existingDocId, 
   }) async {
     final user = _auth.currentUser;
     if (user == null) return;
 
     final settingsRef = _db.collection('users').doc(user.uid).collection('cycleProfile').doc('settings');
-    final historyRef = settingsRef.collection('cycleHistory').doc();
+    
+    final historyRef = existingDocId != null 
+        ? settingsRef.collection('cycleHistory').doc(existingDocId)
+        : settingsRef.collection('cycleHistory').doc();
     
     final latestPreviousEntry = await settingsRef.collection('cycleHistory')
         .where('entryDate', isLessThan: entryDate).orderBy('entryDate', descending: true).limit(1).get();
@@ -83,18 +114,6 @@ class CycleService {
     final startsNewCycle = isPeriodStart; 
     final endsCurrentPeriod = !currentHasFlow && hadFlowPreviousDay && !startsNewCycle;
     
-    final effectiveLastPeriodStart = startsNewCycle ? entryDate : (currentLastPeriodStart ?? entryDate);
-    final previousFlowDate = previousEntryDate ?? entryDate;
-    final calculatedPeriodDuration = previousFlowDate.difference(effectiveLastPeriodStart).inDays + 1;
-    
-    final effectivePeriodDuration = endsCurrentPeriod ? (calculatedPeriodDuration < 1 ? 1 : calculatedPeriodDuration) : periodDuration;
-    
-    final nextPeriodPredicted = effectiveLastPeriodStart.add(Duration(days: cycleLength));
-    final ovulationDate = nextPeriodPredicted.subtract(const Duration(days: 14));
-    final fertilityWindowStart = ovulationDate.subtract(const Duration(days: 5));
-    final fertilityWindowEnd = ovulationDate.add(const Duration(days: 1));
-    final recommendation = _buildRecommendation(flowIntensity: flowIntensity, symptoms: symptoms, mood: mood);
-    
     final cycleEvent = startsNewCycle ? 'periodStart' : endsCurrentPeriod ? 'periodEnd' : 'cycleLog';
 
     final entryData = {
@@ -106,52 +125,73 @@ class CycleService {
       'mood': mood,
       'createdAt': FieldValue.serverTimestamp(),
     };
-    
-    final lastCycleLog = {
-      'entryDate': entryDate,
-      'flowIntensity': flowIntensity,
-      'hasFlow': currentHasFlow,
-      'cycleEvent': cycleEvent,
-      'symptoms': symptoms,
-      'mood': mood,
-    };
 
     final batch = _db.batch();
-    batch.set(historyRef, entryData);
+    batch.set(historyRef, entryData, SetOptions(merge: true));
     
-    final settingsUpdate = <String, dynamic>{
+    batch.update(settingsRef, {
       'periodIsActive': currentHasFlow,
-      'nextPeriodPredicted': nextPeriodPredicted,
-      'fertilityWindowStart': fertilityWindowStart,
-      'fertilityWindowEnd': fertilityWindowEnd,
-      'lastCycleLog': lastCycleLog,
-      'lastRecommendation': recommendation,
+      'cycleLength': cycleLength, 
       'updatedAt': FieldValue.serverTimestamp(),
-    };
+    });
     
-    if (startsNewCycle) {
-      settingsUpdate['lastPeriodStart'] = entryDate;
-      settingsUpdate['lastPeriodEnd'] = null; 
-      settingsUpdate['periodDuration'] = effectivePeriodDuration; 
-      settingsUpdate['cycleLength'] = cycleLength; 
-      
-      if (currentLastPeriodStart != null && !_isSameDay(entryDate, currentLastPeriodStart)) {
-        settingsUpdate['pastPeriods'] = FieldValue.arrayUnion([
-          {
-            'start': currentLastPeriodStart,
-            'duration': periodDuration,
-          }
-        ]);
-      }
-    }
-    
-    if (endsCurrentPeriod) {
-      settingsUpdate['lastPeriodEnd'] = previousFlowDate;
-      settingsUpdate['periodDuration'] = effectivePeriodDuration;
-    }
-    
-    batch.update(settingsRef, settingsUpdate);
     await batch.commit();
+
+    await _recalculateProfile(user.uid, settingsRef);
+  }
+
+  Future<void> _recalculateProfile(String uid, DocumentReference settingsRef) async {
+    final settingsSnap = await settingsRef.get();
+    if (!settingsSnap.exists) return;
+    final settingsData = settingsSnap.data() as Map<String, dynamic>;
+    int cycleLength = settingsData['cycleLength'] ?? 30;
+    int periodDuration = settingsData['periodDuration'] ?? 6;
+
+    final latestPeriodStartSnap = await settingsRef.collection('cycleHistory')
+        .where('cycleEvent', isEqualTo: 'periodStart')
+        .orderBy('entryDate', descending: true)
+        .limit(1).get();
+
+    DateTime? lastPeriodStart;
+    if (latestPeriodStartSnap.docs.isNotEmpty) {
+      lastPeriodStart = (latestPeriodStartSnap.docs.first.data()['entryDate'] as Timestamp).toDate();
+    }
+
+    final allPeriodStartsSnap = await settingsRef.collection('cycleHistory')
+        .where('cycleEvent', isEqualTo: 'periodStart')
+        .orderBy('entryDate', descending: true)
+        .get();
+
+    List<Map<String, dynamic>> pastPeriods = [];
+    for (int i = 1; i < allPeriodStartsSnap.docs.length; i++) {
+      final data = allPeriodStartsSnap.docs[i].data();
+      pastPeriods.add({
+        'start': data['entryDate'],
+        'duration': periodDuration,
+      });
+    }
+
+    if (lastPeriodStart != null) {
+      final nextPeriodPredicted = lastPeriodStart.add(Duration(days: cycleLength));
+      final ovulationDate = nextPeriodPredicted.subtract(const Duration(days: 14));
+      final fertilityWindowStart = ovulationDate.subtract(const Duration(days: 5));
+      final fertilityWindowEnd = ovulationDate.add(const Duration(days: 1));
+      
+      final recommendation = _buildRecommendation(
+        flowIntensity: settingsData['lastCycleLog']?['flowIntensity'] ?? 'Καμία ροή',
+        symptoms: List<String>.from(settingsData['lastCycleLog']?['symptoms'] ?? []),
+        mood: settingsData['lastCycleLog']?['mood'] ?? 'Ουδέτερη'
+      );
+
+      await settingsRef.update({
+        'lastPeriodStart': lastPeriodStart,
+        'nextPeriodPredicted': nextPeriodPredicted,
+        'fertilityWindowStart': fertilityWindowStart,
+        'fertilityWindowEnd': fertilityWindowEnd,
+        'pastPeriods': pastPeriods,
+        'lastRecommendation': recommendation,
+      });
+    }
   }
 
   bool _hasRecordedFlow(String? flowIntensity) => flowIntensity != null && flowIntensity.isNotEmpty && flowIntensity != 'Καμία ροή';
@@ -169,5 +209,4 @@ class CycleService {
   }
 
   DateTime _dateOnly(DateTime date) => DateTime(date.year, date.month, date.day);
-  bool _isSameDay(DateTime first, DateTime second) => first.year == second.year && first.month == second.month && first.day == second.day;
 }

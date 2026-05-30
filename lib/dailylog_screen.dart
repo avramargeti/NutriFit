@@ -23,6 +23,9 @@ class _DailyLogScreenState extends State<DailyLogScreen> {
   final List<String> selectedLogSymptoms = [];
   bool isPeriodStart = false;
 
+  bool _isLocalLoading = true; 
+  String? existingDocId;     
+
   final List<String> _flowIntensityOptions = ['Ελαφριά', 'Κανονική', 'Βαριά', 'Καμία ροή'];
   final List<String> _moodOptions = ['Καλή', 'Ουδέτερη', 'Κακή'];
   final List<String> _cycleLogSymptoms = ['Κράμπες', 'Πόνος στη μέση', 'Πονοκέφαλος', 'Ατονία', 'Κόπωση', 'Φούσκωμα'];
@@ -31,15 +34,69 @@ class _DailyLogScreenState extends State<DailyLogScreen> {
   void initState() {
     super.initState();
     selectedDate = widget.initialDate;
+    _checkAndPrepopulateData();
+  }
+
+  Future<void> _checkAndPrepopulateData() async {
+    try {
+      final doc = await _cycleService.getEntryForDate(selectedDate);
+      if (doc != null && mounted) {
+        final data = doc.data() as Map<String, dynamic>;
+        setState(() {
+          existingDocId = doc.id;
+          selectedFlow = data['flowIntensity'] ?? 'Ελαφριά';
+          selectedMood = data['mood'] ?? 'Ουδέτερη';
+          selectedLogSymptoms.addAll(List<String>.from(data['symptoms'] ?? []));
+          isPeriodStart = data['cycleEvent'] == 'periodStart';
+          _isLocalLoading = false;
+        });
+      } else {
+        if (mounted) setState(() => _isLocalLoading = false);
+      }
+    } catch (e) {
+      if (mounted) setState(() => _isLocalLoading = false);
+    }
   }
 
   DateTime _dateOnly(DateTime date) => DateTime(date.year, date.month, date.day);
-
   DateTime? _parseDate(dynamic val) {
     if (val == null) return null;
     if (val is Timestamp) return val.toDate();
     if (val is DateTime) return val;
     return null;
+  }
+
+  Future<void> _deleteEntry() async {
+    if (existingDocId == null) return;
+
+    bool? confirmDelete = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Διαγραφή Δεδομένων;'),
+        content: const Text('Είστε σίγουρες ότι θέλετε να διαγράψετε την καταγραφή αυτής της ημέρας;'),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text('ΑΚΥΡΩΣΗ')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red.shade400),
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('ΔΙΑΓΡΑΦΗ', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmDelete != true || !mounted) return;
+
+    Navigator.of(context).pop(); 
+    
+    try {
+      await _cycleService.deleteCycleEntry(existingDocId!);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Η καταγραφή διαγράφηκε επιτυχώς!'), backgroundColor: Colors.green)
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Σφάλμα: $e'), backgroundColor: Colors.red));
+    }
   }
 
   Future<void> _saveEntry() async {
@@ -64,7 +121,6 @@ class _DailyLogScreenState extends State<DailyLogScreen> {
 
         int deviation = normSelected.difference(normPredicted).inDays.abs();
 
-        // Ελέγχει αν η απόκλιση είναι πάνω από 4 μέρες
         if (deviation >= 4) {
           bool? isConfirmed = await showDialog<bool>(
             context: context,
@@ -79,17 +135,14 @@ class _DailyLogScreenState extends State<DailyLogScreen> {
               ),
               content: Text(
                 'Η ημερομηνία που επιλέξατε αποκλίνει κατά $deviation μέρες από την προβλεπόμενη ( ${normPredicted.day}/${normPredicted.month} ).\n\n'
-                'Πρόκειται για κανονική έναρξη νέου κύκλου ή για μεμονωμένο συμβάν (π.χ. κηλίδες);'
+                'Πρόκειται για κανονική έναρξη νέου κύκλου ή για μεμονωμένο συμβάν;'
               ),
               actions: [
-                TextButton(
-                  onPressed: () => Navigator.of(context).pop(false),
-                  child: const Text('ΜΕΜΟΝΩΜΕΝΟ ΣΥΜΒΑΝ', style: TextStyle(color: Color.fromARGB(255, 167, 3, 101))),
-                ),
+                TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text('ΜΕΜΟΝΩΜΕΝΟ ΣΥΜΒΑΝ', style: TextStyle(color: Colors.grey))),
                 ElevatedButton(
                   style: ElevatedButton.styleFrom(backgroundColor: sageGreen),
                   onPressed: () => Navigator.of(context).pop(true),
-                  child: const Text('ΕΝΑΡΞΗ ΝΕΟΥ ΚΥΚΛΟΥ', style: TextStyle(color: Colors.white)),
+                  child: const Text('EΝΑΡΞΗ ΝΕΟΥ ΚΥΚΛΟΥ', style: TextStyle(color: Colors.white)),
                 ),
               ],
             ),
@@ -120,92 +173,106 @@ class _DailyLogScreenState extends State<DailyLogScreen> {
         cycleLength: finalCycleLength, 
         periodDuration: periodDuration,
         currentLastPeriodStart: lastPeriodStart,
+        existingDocId: existingDocId, 
+      );
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Η καταγραφή ενημερώθηκε επιτυχώς!'), backgroundColor: Colors.green)
       );
 
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Προέκυψε σφάλμα: $e'), backgroundColor: Colors.red)
-        );
-      }
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Προέκυψε σφάλμα: $e'), backgroundColor: Colors.red));
     }
   }
 
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: const Text('Καταγραφή Κύκλου'),
-      content: SingleChildScrollView(
-        child: Form(
-          key: _formKey,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              ListTile(
-                contentPadding: EdgeInsets.zero,
-                title: const Text('Ημερομηνία'),
-                subtitle: Text('${selectedDate.day}/${selectedDate.month}/${selectedDate.year}'),
-                trailing: const Icon(Icons.calendar_today),
-                onTap: () async {
-                  final picked = await showDatePicker(context: context, initialDate: selectedDate, firstDate: DateTime(2023), lastDate: DateTime.now());
-                  if (picked != null) setState(() => selectedDate = picked);
-                },
-              ),
-              const SizedBox(height: 10),
-              Container(
-                decoration: BoxDecoration(color: Colors.pink.shade50, borderRadius: BorderRadius.circular(10)),
-                child: SwitchListTile(
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 10),
-                  activeColor: Colors.pink.shade400,
-                  title: const Text('Έναρξη περιόδου', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-                  subtitle: const Text('Το τέλος υπολογίζεται αυτόματα.', style: TextStyle(fontSize: 12)),
-                  value: isPeriodStart,
-                  onChanged: (val) {
-                    setState(() {
-                      isPeriodStart = val;
-                      if (val && selectedFlow == 'Καμία ροή') selectedFlow = 'Κανονική';
-                    });
-                  },
+      title: Text(existingDocId != null ? 'Τροποποίηση Καταγραφής' : 'Καταγραφή Κύκλου'),
+      content: _isLocalLoading
+          ? const SizedBox(height: 100, child: Center(child: CircularProgressIndicator()))
+          : SingleChildScrollView(
+              child: Form(
+                key: _formKey,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text('Ημερομηνία'),
+                      subtitle: Text('${selectedDate.day}/${selectedDate.month}/${selectedDate.year}'),
+                      trailing: const Icon(Icons.calendar_today),
+                      onTap: () async {
+                        final picked = await showDatePicker(context: context, initialDate: selectedDate, firstDate: DateTime(2023), lastDate: DateTime.now());
+                        if (picked != null) {
+                          setState(() {
+                            selectedDate = picked;
+                            _isLocalLoading = true;
+                          });
+                          _checkAndPrepopulateData();
+                        }
+                      },
+                    ),
+                    const SizedBox(height: 10),
+                    Container(
+                      decoration: BoxDecoration(color: Colors.pink.shade50, borderRadius: BorderRadius.circular(10)),
+                      child: SwitchListTile(
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 10),
+                        activeColor: Colors.pink.shade400,
+                        title: const Text('Έναρξη περιόδου', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                        subtitle: const Text('Το τέλος υπολογίζεται αυτόματα.', style: TextStyle(fontSize: 12)),
+                        value: isPeriodStart,
+                        onChanged: (val) {
+                          setState(() {
+                            isPeriodStart = val;
+                            if (val && selectedFlow == 'Καμία ροή') selectedFlow = 'Κανονική';
+                          });
+                        },
+                      ),
+                    ),
+                    const SizedBox(height: 15),
+                    DropdownButtonFormField<String>(
+                      value: selectedFlow,
+                      decoration: const InputDecoration(labelText: 'Ένταση Ροής'),
+                      items: _flowIntensityOptions.map((flow) => DropdownMenuItem(value: flow, child: Text(flow))).toList(),
+                      onChanged: (value) { if (value != null) setState(() => selectedFlow = value); },
+                    ),
+                    const SizedBox(height: 16),
+                    const Text('Συμπτώματα', style: TextStyle(fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8, runSpacing: 8,
+                      children: _cycleLogSymptoms.map((symptom) {
+                        final isSelected = selectedLogSymptoms.contains(symptom);
+                        return FilterChip(
+                          label: Text(symptom), selected: isSelected, selectedColor: Colors.pink.shade100, checkmarkColor: Colors.pink.shade400,
+                          onSelected: (selected) => setState(() => selected ? selectedLogSymptoms.add(symptom) : selectedLogSymptoms.remove(symptom)),
+                        );
+                      }).toList(),
+                    ),
+                    const SizedBox(height: 16),
+                    DropdownButtonFormField<String>(
+                      value: selectedMood,
+                      decoration: const InputDecoration(labelText: 'Διάθεση'),
+                      items: _moodOptions.map((mood) => DropdownMenuItem(value: mood, child: Text(mood))).toList(),
+                      onChanged: (value) { if (value != null) setState(() => selectedMood = value); },
+                    ),
+                  ],
                 ),
               ),
-              const SizedBox(height: 15),
-              DropdownButtonFormField<String>(
-                value: selectedFlow,
-                decoration: const InputDecoration(labelText: 'Ένταση Ροής'),
-                items: _flowIntensityOptions.map((flow) => DropdownMenuItem(value: flow, child: Text(flow))).toList(),
-                onChanged: (value) { if (value != null) setState(() => selectedFlow = value); },
-              ),
-              const SizedBox(height: 16),
-              const Text('Συμπτώματα', style: TextStyle(fontWeight: FontWeight.bold)),
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 8, runSpacing: 8,
-                children: _cycleLogSymptoms.map((symptom) {
-                  final isSelected = selectedLogSymptoms.contains(symptom);
-                  return FilterChip(
-                    label: Text(symptom), selected: isSelected, selectedColor: Colors.pink.shade100, checkmarkColor: Colors.pink.shade400,
-                    onSelected: (selected) => setState(() => selected ? selectedLogSymptoms.add(symptom) : selectedLogSymptoms.remove(symptom)),
-                  );
-                }).toList(),
-              ),
-              const SizedBox(height: 16),
-              DropdownButtonFormField<String>(
-                value: selectedMood,
-                decoration: const InputDecoration(labelText: 'Διάθεση'),
-                items: _moodOptions.map((mood) => DropdownMenuItem(value: mood, child: Text(mood))).toList(),
-                onChanged: (value) { if (value != null) setState(() => selectedMood = value); },
-              ),
-            ],
-          ),
-        ),
-      ),
+            ),
       actions: [
+        if (existingDocId != null && !_isLocalLoading)
+          TextButton(
+            onPressed: _deleteEntry,
+            child: const Text('ΔΙΑΓΡΑΦΗ', style: TextStyle(color: Colors.red)),
+          ),
         TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('ΑΚΥΡΩΣΗ')),
         ElevatedButton(
           style: ElevatedButton.styleFrom(backgroundColor: sageGreen),
-          onPressed: _saveEntry,
-          child: const Text('ΑΠΟΘΗΚΕΥΣΗ', style: TextStyle(color: Colors.white)),
+          onPressed: _isLocalLoading ? null : _saveEntry,
+          child: Text(existingDocId != null ? 'ΕΝΗΜΕΡΩΣΗ' : 'ΑΠΟΘΗΚΕΥΣΗ', style: const TextStyle(color: Colors.white)),
         ),
       ],
     );
