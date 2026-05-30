@@ -10,8 +10,15 @@ class FitnessProgramsScreen extends StatefulWidget {
   final bool viewAll;
   final Map<String, String>? userPreferences;
   final bool isAdmin;
+  final String? calendarDateString;
 
-  const FitnessProgramsScreen({super.key, required this.viewAll, this.userPreferences, this.isAdmin = false});
+  const FitnessProgramsScreen({
+    super.key,
+    required this.viewAll,
+    this.userPreferences,
+    this.isAdmin = false,
+    this.calendarDateString,
+  });
 
   @override
   State<FitnessProgramsScreen> createState() => _FitnessProgramsScreenState();
@@ -74,7 +81,7 @@ class _FitnessProgramsScreenState extends State<FitnessProgramsScreen> {
   @override
   void initState() {
     super.initState();
-    _isShowingAll = widget.isAdmin ? true :widget.viewAll;
+    _isShowingAll = widget.isAdmin ? true : widget.viewAll;
     _currentPreferences = widget.userPreferences;
     _loadUserData();
   }
@@ -502,32 +509,35 @@ class _FitnessProgramsScreenState extends State<FitnessProgramsScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(widget.isAdmin 
-            ? 'Διαχείριση Προγραμμάτων' 
-            : (_isShowingAll ? 'Όλα τα Προγράμματα' : 'Για Εσάς')),
-        
-        actions: widget.isAdmin 
-          ? [] 
-          : [
-              if (!hasQuiz)
-                IconButton(
-                  icon: const Icon(Icons.psychology_alt),
-                  tooltip: 'Βρες τι σου ταιριάζει',
-                  onPressed: () => _showQuiz()
-                )
-              else ...[
-                IconButton(
-                  icon: Icon(_isShowingAll ? Icons.auto_awesome : Icons.list),
-                  tooltip: _isShowingAll ? 'Δες τα Προτεινόμενα' : 'Δες Όλα',
-                  onPressed: () => setState(() => _isShowingAll = !_isShowingAll),
-                ),
-                IconButton(
-                  icon: const Icon(Icons.refresh),
-                  tooltip: 'Επανάληψη Κουίζ',
-                  onPressed: _retakeQuizWithWarning,
-                ),
+        title: Text(
+          widget.isAdmin
+              ? 'Διαχείριση Προγραμμάτων'
+              : (_isShowingAll ? 'Όλα τα Προγράμματα' : 'Για Εσάς'),
+        ),
+
+        actions: widget.isAdmin
+            ? []
+            : [
+                if (!hasQuiz)
+                  IconButton(
+                    icon: const Icon(Icons.psychology_alt),
+                    tooltip: 'Βρες τι σου ταιριάζει',
+                    onPressed: () => _showQuiz(),
+                  )
+                else ...[
+                  IconButton(
+                    icon: Icon(_isShowingAll ? Icons.auto_awesome : Icons.list),
+                    tooltip: _isShowingAll ? 'Δες τα Προτεινόμενα' : 'Δες Όλα',
+                    onPressed: () =>
+                        setState(() => _isShowingAll = !_isShowingAll),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.refresh),
+                    tooltip: 'Επανάληψη Κουίζ',
+                    onPressed: _retakeQuizWithWarning,
+                  ),
+                ],
               ],
-            ],
       ),
       floatingActionButton: FloatingActionButton(
         backgroundColor: sageGreen,
@@ -753,7 +763,10 @@ class _FitnessProgramsScreenState extends State<FitnessProgramsScreen> {
                                     ),
                                   const SizedBox(height: 12),
                                   if (!widget.isAdmin)
-                                    ElevatedButton(onPressed: () => _addToPlan(data), child: const Text('Προσθήκη στο Πλάνο')),
+                                    ElevatedButton(
+                                      onPressed: () => _addToPlan(data),
+                                      child: const Text('Προσθήκη στο Πλάνο'),
+                                    ),
                                 ],
                               ),
                             ),

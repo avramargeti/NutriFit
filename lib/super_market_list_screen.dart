@@ -37,14 +37,23 @@ class _SuperMarketListScreenState extends State<SuperMarketListScreen> {
         .delete();
   }
 
-  void _showEditItemDialog(String docId, String currentName, String currentQuantity, int currentAmount) {
-    final TextEditingController nameController = TextEditingController(text: currentName);
-    
+  void _showEditItemDialog(
+    String docId,
+    String currentName,
+    String currentQuantity,
+    int currentAmount,
+  ) {
+    final TextEditingController nameController = TextEditingController(
+      text: currentName,
+    );
+
     // Αν δεν έχει quantity από χρήστη αλλά έχει amount από συνταγή βάλτο ως αρχικό κείμενο
-    String initialQty = currentQuantity.isNotEmpty 
-        ? currentQuantity 
+    String initialQty = currentQuantity.isNotEmpty
+        ? currentQuantity
         : (currentAmount > 0 ? '${currentAmount}g' : '');
-    final TextEditingController qtyController = TextEditingController(text: initialQty);
+    final TextEditingController qtyController = TextEditingController(
+      text: initialQty,
+    );
 
     showDialog(
       context: context,
@@ -55,17 +64,26 @@ class _SuperMarketListScreenState extends State<SuperMarketListScreen> {
           children: [
             TextField(
               controller: nameController,
-              decoration: const InputDecoration(labelText: 'Όνομα προϊόντος', border: OutlineInputBorder()),
+              decoration: const InputDecoration(
+                labelText: 'Όνομα προϊόντος',
+                border: OutlineInputBorder(),
+              ),
             ),
             const SizedBox(height: 12),
             TextField(
               controller: qtyController,
-              decoration: const InputDecoration(labelText: 'Ποσότητα (Προαιρετικό)', border: OutlineInputBorder()),
+              decoration: const InputDecoration(
+                labelText: 'Ποσότητα (Προαιρετικό)',
+                border: OutlineInputBorder(),
+              ),
             ),
           ],
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('ΑΚΥΡΟ', style: TextStyle(color: Colors.grey))),
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('ΑΚΥΡΟ', style: TextStyle(color: Colors.grey)),
+          ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: sageGreen),
             onPressed: () async {
@@ -89,30 +107,39 @@ class _SuperMarketListScreenState extends State<SuperMarketListScreen> {
               } else {
                 final existingDoc = await collectionRef.doc(newDocId).get();
                 if (existingDoc.exists) {
-                  if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Υπάρχει ήδη προϊόν με αυτό το όνομα στη λίστα!')),
-                    );
-                  }
+                  if (!context.mounted) return;
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text(
+                        'Υπάρχει ήδη προϊόν με αυτό το όνομα στη λίστα!',
+                      ),
+                    ),
+                  );
                   return;
                 }
 
                 // Αν δεν υπάρχει, φτιάχνουμε νέο αρχείο και σβήνουμε το παλιό
                 final oldDoc = await collectionRef.doc(docId).get();
-                bool isChecked = oldDoc.exists ? (oldDoc.data()?['isChecked'] ?? false) : false;
-                
+                bool isChecked = oldDoc.exists
+                    ? (oldDoc.data()?['isChecked'] ?? false)
+                    : false;
+
                 await collectionRef.doc(newDocId).set({
                   'name': newName,
-                  'amount': 0, 
+                  'amount': 0,
                   'quantity': newQty,
                   'isChecked': isChecked,
                   'addedAt': FieldValue.serverTimestamp(),
                 });
                 await collectionRef.doc(docId).delete();
               }
-              if (mounted) Navigator.pop(context);
+              if (!context.mounted) return;
+              Navigator.pop(context);
             },
-            child: const Text('ΑΠΟΘΗΚΕΥΣΗ', style: TextStyle(color: Colors.white)),
+            child: const Text(
+              'ΑΠΟΘΗΚΕΥΣΗ',
+              style: TextStyle(color: Colors.white),
+            ),
           ),
         ],
       ),
@@ -161,7 +188,6 @@ class _SuperMarketListScreenState extends State<SuperMarketListScreen> {
               String name = nameController.text.trim();
               String qty = qtyController.text.trim();
               if (name.isNotEmpty && currentUser != null) {
-
                 String normalizedId = generateIngredientId(name);
 
                 final docRef = FirebaseFirestore.instance
@@ -172,57 +198,78 @@ class _SuperMarketListScreenState extends State<SuperMarketListScreen> {
 
                 final docSnapshot = await docRef.get();
                 if (docSnapshot.exists) {
-                  if (mounted) {
-                    Navigator.pop(context);
+                  if (!context.mounted) return;
+                  Navigator.pop(context);
 
-                    var data = docSnapshot.data() as Map<String, dynamic>;
-                    String existingName = data['name'] ?? name;
-                    String existingQty = data['quantity'] ?? '';
-                    int existingAmount = data['amount'] ?? 0;
-                    String existingId = docSnapshot.id;
-                    
-                    showDialog(
-                      context: context,
-                      builder: (context) => AlertDialog(
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-                        title: const Row(
-                          children: [
-                            Icon(Icons.info_outline, color: Colors.blueAccent),
-                            SizedBox(width: 8),
-                            Text('Ενημέρωση'),
-                          ],
-                        ),
-                        content: const Text('Το προϊόν υπάρχει ήδη στη λίστα σας.\nΘέλετε να επεξεργαστείτε την ποσότητά του;'),
-                        actions: [
-                          TextButton(
-                            onPressed: () => Navigator.pop(context),
-                            child: const Text('ΑΚΥΡΟ', style: TextStyle(color: Colors.grey)),
-                          ),
-                          TextButton(
-                            onPressed: () {
-                              Navigator.pop(context);
-                              _showEditItemDialog(existingId, existingName, existingQty, existingAmount);
-                            },
-                            child: const Text('ΕΠΕΞΕΡΓΑΣΙΑ', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.blueAccent)),
-                          ),
+                  var data = docSnapshot.data() as Map<String, dynamic>;
+                  String existingName = data['name'] ?? name;
+                  String existingQty = data['quantity'] ?? '';
+                  int existingAmount = data['amount'] ?? 0;
+                  String existingId = docSnapshot.id;
+
+                  showDialog(
+                    context: context,
+                    builder: (context) => AlertDialog(
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(15),
+                      ),
+                      title: const Row(
+                        children: [
+                          Icon(Icons.info_outline, color: Colors.blueAccent),
+                          SizedBox(width: 8),
+                          Text('Ενημέρωση'),
                         ],
                       ),
-                    );
-                  }
+                      content: const Text(
+                        'Το προϊόν υπάρχει ήδη στη λίστα σας.\nΘέλετε να επεξεργαστείτε την ποσότητά του;',
+                      ),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(context),
+                          child: const Text(
+                            'ΑΚΥΡΟ',
+                            style: TextStyle(color: Colors.grey),
+                          ),
+                        ),
+                        TextButton(
+                          onPressed: () {
+                            Navigator.pop(context);
+                            _showEditItemDialog(
+                              existingId,
+                              existingName,
+                              existingQty,
+                              existingAmount,
+                            );
+                          },
+                          child: const Text(
+                            'ΕΠΕΞΕΡΓΑΣΙΑ',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: Colors.blueAccent,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
                   return;
                 }
 
                 await docRef.set({
                   'name': name,
-                  'amount': 0, 
-                  'quantity': qty, 
+                  'amount': 0,
+                  'quantity': qty,
                   'isChecked': false,
                   'addedAt': FieldValue.serverTimestamp(),
                 });
-                if (mounted) Navigator.pop(context);
+                if (!context.mounted) return;
+                Navigator.pop(context);
               }
             },
-            child: const Text('ΠΡΟΣΘΗΚΗ', style: TextStyle(color: Colors.white)),
+            child: const Text(
+              'ΠΡΟΣΘΗΚΗ',
+              style: TextStyle(color: Colors.white),
+            ),
           ),
         ],
       ),
@@ -254,9 +301,8 @@ class _SuperMarketListScreenState extends State<SuperMarketListScreen> {
             onPressed: () async {
               String qty = qtyController.text.trim();
               if (currentUser != null) {
-
                 String normalizedId = generateIngredientId(ingName);
-                
+
                 final docRef = FirebaseFirestore.instance
                     .collection('users')
                     .doc(currentUser!.uid)
@@ -265,75 +311,98 @@ class _SuperMarketListScreenState extends State<SuperMarketListScreen> {
 
                 final docSnapshot = await docRef.get();
                 if (docSnapshot.exists) {
-                  if (mounted) {
-                    Navigator.pop(context);
+                  if (!context.mounted) return;
+                  Navigator.pop(context);
 
-                     var data = docSnapshot.data() as Map<String, dynamic>;
-                    String existingName = data['name'] ?? ingName;
-                    String existingQty = data['quantity'] ?? '';
-                    int existingAmount = data['amount'] ?? 0;
-                    String existingId = docSnapshot.id;
-                    
-                    showDialog(
-                      context: context,
-                      builder: (context) => AlertDialog(
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-                        title: const Row(
-                          children: [
-                            Icon(Icons.info_outline, color: Colors.blueAccent),
-                            SizedBox(width: 8),
-                            Text('Ενημέρωση'),
-                          ],
-                        ),
-                        content: const Text('Το προϊόν υπάρχει ήδη στη λίστα σας.\nΘέλετε να επεξεργαστείτε την ποσότητά του;'),
-                        actions: [
-                          TextButton(
-                            onPressed: () => Navigator.pop(context),
-                            child: const Text('ΑΚΥΡΟ', style: TextStyle(color: Colors.grey)),
-                          ),
-                          TextButton(
-                            onPressed: () {
-                              Navigator.pop(context); 
-                              _showEditItemDialog(existingId, existingName, existingQty, existingAmount);
-                            },
-                            child: const Text('ΕΠΕΞΕΡΓΑΣΙΑ', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.blueAccent)),
-                          ),
+                  var data = docSnapshot.data() as Map<String, dynamic>;
+                  String existingName = data['name'] ?? ingName;
+                  String existingQty = data['quantity'] ?? '';
+                  int existingAmount = data['amount'] ?? 0;
+                  String existingId = docSnapshot.id;
+
+                  showDialog(
+                    context: context,
+                    builder: (context) => AlertDialog(
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(15),
+                      ),
+                      title: const Row(
+                        children: [
+                          Icon(Icons.info_outline, color: Colors.blueAccent),
+                          SizedBox(width: 8),
+                          Text('Ενημέρωση'),
                         ],
                       ),
-                    );
-                  }
-                  return; 
+                      content: const Text(
+                        'Το προϊόν υπάρχει ήδη στη λίστα σας.\nΘέλετε να επεξεργαστείτε την ποσότητά του;',
+                      ),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(context),
+                          child: const Text(
+                            'ΑΚΥΡΟ',
+                            style: TextStyle(color: Colors.grey),
+                          ),
+                        ),
+                        TextButton(
+                          onPressed: () {
+                            Navigator.pop(context);
+                            _showEditItemDialog(
+                              existingId,
+                              existingName,
+                              existingQty,
+                              existingAmount,
+                            );
+                          },
+                          child: const Text(
+                            'ΕΠΕΞΕΡΓΑΣΙΑ',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: Colors.blueAccent,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                  return;
                 }
 
                 await docRef.set({
                   'name': ingName,
                   'amount': 0,
-                  'quantity': qty, 
+                  'quantity': qty,
                   'isChecked': false,
                   'addedAt': FieldValue.serverTimestamp(),
                 });
               }
-              if (mounted) Navigator.pop(context);
+              if (!context.mounted) return;
+              Navigator.pop(context);
             },
-            child: const Text('ΠΡΟΣΘΗΚΗ', style: TextStyle(color: Colors.white)),
+            child: const Text(
+              'ΠΡΟΣΘΗΚΗ',
+              style: TextStyle(color: Colors.white),
+            ),
           ),
         ],
       ),
     );
   }
-  
+
   // Προσθήκη Προϊόντος από τη Βιβλιοθήκη
   Future<void> _addItemFromLibrary() async {
     final selectedIngredientData = await Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) => const IngredientsListScreen(isSelectionMode: true),
+        builder: (context) =>
+            const IngredientsListScreen(isSelectionMode: true),
       ),
     );
 
-    if (selectedIngredientData != null && selectedIngredientData is Map<String, dynamic>) {
+    if (selectedIngredientData != null &&
+        selectedIngredientData is Map<String, dynamic>) {
       String ingName = selectedIngredientData['name'];
-      
+
       if (mounted) {
         await _showQuantityForLibraryItem(ingName);
       }
@@ -353,7 +422,9 @@ class _SuperMarketListScreenState extends State<SuperMarketListScreen> {
             Text('Εκκαθάριση Λίστας'),
           ],
         ),
-        content: const Text('Είστε σίγουροι ότι θέλετε να αδειάσετε τη λίστα αγορών σας;'),
+        content: const Text(
+          'Είστε σίγουροι ότι θέλετε να αδειάσετε τη λίστα αγορών σας;',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
@@ -361,7 +432,13 @@ class _SuperMarketListScreenState extends State<SuperMarketListScreen> {
           ),
           TextButton(
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('ΕΚΚΑΘΑΡΙΣΗ', style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold)),
+            child: const Text(
+              'ΕΚΚΑΘΑΡΙΣΗ',
+              style: TextStyle(
+                color: Colors.redAccent,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
           ),
         ],
       ),
@@ -382,7 +459,9 @@ class _SuperMarketListScreenState extends State<SuperMarketListScreen> {
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Η λίστα αγορών εκκαθαρίστηκε επιτυχώς.')),
+          const SnackBar(
+            content: Text('Η λίστα αγορών εκκαθαρίστηκε επιτυχώς.'),
+          ),
         );
       }
     }
@@ -399,12 +478,28 @@ class _SuperMarketListScreenState extends State<SuperMarketListScreen> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.grey[300], borderRadius: BorderRadius.circular(10))),
+            Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: Colors.grey[300],
+                borderRadius: BorderRadius.circular(10),
+              ),
+            ),
             const SizedBox(height: 20),
-            const Text('Προσθήκη στη λίστα', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            const Text(
+              'Προσθήκη στη λίστα',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
             const SizedBox(height: 20),
             ListTile(
-              leading: CircleAvatar(backgroundColor: sageGreen, child: const Icon(Icons.inventory_2_outlined, color: Colors.white)),
+              leading: CircleAvatar(
+                backgroundColor: sageGreen,
+                child: const Icon(
+                  Icons.inventory_2_outlined,
+                  color: Colors.white,
+                ),
+              ),
               title: const Text('Από Βιβλιοθήκη Υλικών'),
               subtitle: const Text('Επιλογή από τα διαθέσιμα υλικά'),
               onTap: () {
@@ -413,7 +508,10 @@ class _SuperMarketListScreenState extends State<SuperMarketListScreen> {
               },
             ),
             ListTile(
-              leading: CircleAvatar(backgroundColor: slateGrey, child: const Icon(Icons.edit, color: Colors.white)),
+              leading: CircleAvatar(
+                backgroundColor: slateGrey,
+                child: const Icon(Icons.edit, color: Colors.white),
+              ),
               title: const Text('Χειροκίνητη Προσθήκη'),
               subtitle: const Text('Γράψτε το δικό σας προϊόν'),
               onTap: () {
@@ -439,7 +537,10 @@ class _SuperMarketListScreenState extends State<SuperMarketListScreen> {
     return Scaffold(
       backgroundColor: Colors.grey[50],
       appBar: AppBar(
-        title: const Text('Λίστα Αγορών', style: TextStyle(color: Colors.white)),
+        title: const Text(
+          'Λίστα Αγορών',
+          style: TextStyle(color: Colors.white),
+        ),
         backgroundColor: sageGreen,
         iconTheme: const IconThemeData(color: Colors.white),
         actions: [
@@ -457,8 +558,12 @@ class _SuperMarketListScreenState extends State<SuperMarketListScreen> {
             .collection('shoppingList')
             .snapshots(),
         builder: (context, snapshot) {
-          if (snapshot.hasError) return const Center(child: Text('Σφάλμα φόρτωσης.'));
-          if (!snapshot.hasData) return Center(child: CircularProgressIndicator(color: sageGreen));
+          if (snapshot.hasError) {
+            return const Center(child: Text('Σφάλμα φόρτωσης.'));
+          }
+          if (!snapshot.hasData) {
+            return Center(child: CircularProgressIndicator(color: sageGreen));
+          }
 
           final items = snapshot.data!.docs;
 
@@ -467,7 +572,11 @@ class _SuperMarketListScreenState extends State<SuperMarketListScreen> {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(Icons.shopping_cart_outlined, size: 80, color: Colors.grey[300]),
+                  Icon(
+                    Icons.shopping_cart_outlined,
+                    size: 80,
+                    color: Colors.grey[300],
+                  ),
                   const SizedBox(height: 16),
                   const Text(
                     'Η λίστα σας είναι άδεια.\nΠροσθέστε προϊόντα!',
@@ -479,12 +588,15 @@ class _SuperMarketListScreenState extends State<SuperMarketListScreen> {
             );
           }
 
-          final sortedItems = items.toList()..sort((a, b) {
-            bool aChecked = (a.data() as Map<String, dynamic>)['isChecked'] ?? false;
-            bool bChecked = (b.data() as Map<String, dynamic>)['isChecked'] ?? false;
-            if (aChecked == bChecked) return 0;
-            return aChecked ? 1 : -1;
-          });
+          final sortedItems = items.toList()
+            ..sort((a, b) {
+              bool aChecked =
+                  (a.data() as Map<String, dynamic>)['isChecked'] ?? false;
+              bool bChecked =
+                  (b.data() as Map<String, dynamic>)['isChecked'] ?? false;
+              if (aChecked == bChecked) return 0;
+              return aChecked ? 1 : -1;
+            });
 
           return ListView.builder(
             padding: const EdgeInsets.only(bottom: 80),
@@ -509,22 +621,31 @@ class _SuperMarketListScreenState extends State<SuperMarketListScreen> {
                 margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                 elevation: isChecked ? 0 : 2,
                 color: isChecked ? Colors.grey.shade200 : Colors.white,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
                 child: ListTile(
-                  onTap: () => _showEditItemDialog(docId, name, quantity, amount),
+                  onTap: () =>
+                      _showEditItemDialog(docId, name, quantity, amount),
                   leading: Checkbox(
                     value: isChecked,
                     activeColor: sageGreen,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(4),
+                    ),
                     onChanged: (val) => _toggleItem(docId, isChecked),
                   ),
                   title: Text(
                     '$name$displaySuffix',
                     style: TextStyle(
                       fontSize: 16,
-                      fontWeight: isChecked ? FontWeight.normal : FontWeight.bold,
+                      fontWeight: isChecked
+                          ? FontWeight.normal
+                          : FontWeight.bold,
                       color: isChecked ? Colors.grey : slateGrey,
-                      decoration: isChecked ? TextDecoration.lineThrough : TextDecoration.none,
+                      decoration: isChecked
+                          ? TextDecoration.lineThrough
+                          : TextDecoration.none,
                     ),
                   ),
                   trailing: IconButton(
@@ -541,7 +662,10 @@ class _SuperMarketListScreenState extends State<SuperMarketListScreen> {
         onPressed: _showAddOptions,
         backgroundColor: slateGrey,
         icon: const Icon(Icons.add, color: Colors.white),
-        label: const Text('Προσθήκη', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        label: const Text(
+          'Προσθήκη',
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+        ),
       ),
     );
   }
