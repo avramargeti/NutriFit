@@ -12,6 +12,11 @@ import 'fitness_programs_screen.dart';
 import 'super_market_list_screen.dart';
 import 'fitness_screen.dart';
 import 'chatbot_fab.dart';
+import 'cycle_screen.dart';
+import 'achievements_screen.dart';
+import 'community_feed_screen.dart';
+import 'calendar_screen.dart';
+
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -22,6 +27,7 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   String username = "User";
+  String? userGender;
   bool isLoadingUsername = true;
 
   final Color sageGreen = const Color(0xFFA8B3A0);
@@ -31,16 +37,6 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
     _fetchUsername();
-  }
-
-  void _showComingSoon(String featureName) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('Η λειτουργία "$featureName" θα είναι σύντομα διαθέσιμη! 🚀'),
-        backgroundColor: sageGreen,
-        duration: const Duration(seconds: 2),
-      ),
-    );
   }
 
   Future<void> _fetchUsername() async {
@@ -55,7 +51,11 @@ class _HomeScreenState extends State<HomeScreen> {
         if (mounted) {
           setState(() {
             if (doc.exists && doc.data() != null) {
-              username = (doc.data() as Map<String, dynamic>)['username'] ?? "User";
+              var data = doc.data() as Map<String, dynamic>;
+              username = data['username'] ?? "User";
+              userGender = data['gender']; 
+              username =
+                  (doc.data() as Map<String, dynamic>)['username'] ?? "User";
             }
             isLoadingUsername = false;
           });
@@ -84,7 +84,6 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  // Λειτουργία για το μενού των συνταγών
   void _showRecipesModal(BuildContext context) {
     showModalBottomSheet(
       context: context,
@@ -123,7 +122,7 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
               title: const Text('Αναζήτηση Συνταγών'),
               onTap: () {
-                Navigator.pop(context); 
+                Navigator.pop(context);
                 Navigator.push(
                   context,
                   MaterialPageRoute(
@@ -139,7 +138,7 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
               title: const Text('Δημιουργία Νέας Συνταγής'),
               onTap: () {
-                Navigator.pop(context); 
+                Navigator.pop(context);
                 Navigator.push(
                   context,
                   MaterialPageRoute(
@@ -161,7 +160,7 @@ class _HomeScreenState extends State<HomeScreen> {
     final List<String> adminEmails = [
       'avramargeti@gmail.com',
       'bokosdimitris@gmail.com',
-      'adonopoulouifigeneia@icloud.com'
+      'adonopoulouifigeneia@icloud.com',
     ];
     final isAdmin =
         currentUser != null && adminEmails.contains(currentUser.email);
@@ -169,17 +168,55 @@ class _HomeScreenState extends State<HomeScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('NutriFit'),
+        backgroundColor: Colors.transparent,
         elevation: 0,
+        centerTitle: true,
+        leadingWidth: 100,
+        leading: Row(
+          mainAxisAlignment: MainAxisAlignment.start,
+          children: [
+            IconButton(
+              icon: const Icon(Icons.workspace_premium),
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => const AchievementsScreen()),
+                );
+              },
+            ),
+            IconButton(
+              icon: const Icon(Icons.rss_feed),
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => const CommunityFeedScreen()),
+                );
+              },
+            ),
+          ],
+        ),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.shopping_cart_outlined),
+            tooltip: 'Λίστα Super Market',
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const SuperMarketListScreen()),
+              );
+            },
+          ),
           IconButton(
             icon: const Icon(Icons.menu_book),
             tooltip: 'My Cooking Book',
             onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (context) => const CookingBookScreen()),
-                );
-              },
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const CookingBookScreen(),
+                ),
+              );
+            },
           ),
           IconButton(
             icon: const Icon(Icons.logout),
@@ -271,43 +308,52 @@ class _HomeScreenState extends State<HomeScreen> {
               onTap: () => _showRecipesModal(context),
             ),
             const SizedBox(height: 20),
-
-            // --- ΝΕΟ ΚΟΥΜΠΙ: ΛΙΣΤΑ SUPER MARKET ---
-            _buildDashboardButton(
-              context,
-              title: 'ΛΙΣΤΑ SUPER MARKET',
-              icon: Icons.shopping_cart_outlined,
-              color: slateGrey,
-              onTap: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (context) => const SuperMarketListScreen()),
-                );
-              },
-            ),
-            const SizedBox(height: 20),
             
             _buildDashboardButton(
               context,
               title: 'FITNESS',
               icon: Icons.fitness_center,
-              color: sageGreen,
+              color: slateGrey,
               onTap: () {
                 Navigator.push(
                   context,
-                  MaterialPageRoute(builder: (context) => const FitnessScreen()),
+                  MaterialPageRoute(
+                    builder: (context) => const FitnessScreen(),
+                  ),
                 );
-              }
+              },
             ),
-            
+            if (userGender == 'Γυναίκα') ...[
+              const SizedBox(height: 20),
+              _buildDashboardButton(
+                context,
+                title: 'Ο ΚΥΚΛΟΣ ΜΟΥ',
+                icon: Icons.water_drop,
+                color: Colors.pink.shade300,
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (context) => const CycleScreen()),
+                  );
+                }
+              ),
+            ],
+
             const SizedBox(height: 20),
             _buildDashboardButton(
               context,
-              title: 'ΤΟ ΠΛΑΝΟ ΜΟΥ',
+              title: 'ΗΜΕΡΟΛΟΓΙΟ',
               icon: Icons.calendar_today,
               color: slateGrey,
               isOutlined: true,
-              onTap: () => _showComingSoon("Το Πλάνο Μου"),
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const CalendarScreen(),
+                  ),
+                );
+              },
             ),
 
             if (isAdmin) ...[
@@ -404,7 +450,10 @@ class _HomeScreenState extends State<HomeScreen> {
               onPressed: onTap,
               label: Text(
                 title,
-                style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
+                style: const TextStyle(
+                  fontSize: 17,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
             )
           : ElevatedButton.icon(
@@ -421,7 +470,10 @@ class _HomeScreenState extends State<HomeScreen> {
               onPressed: onTap,
               label: Text(
                 title,
-                style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
+                style: const TextStyle(
+                  fontSize: 17,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
             ),
     );
