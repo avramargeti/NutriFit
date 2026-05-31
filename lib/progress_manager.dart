@@ -13,6 +13,26 @@ class ProgressManager {
 
   Future<Map<String, dynamic>> generateWeeklyReview() async {
     DateTime today = DateTime.now();
+
+    var historySnapshot = await FirebaseFirestore.instance
+        .collection('users')
+        .doc(userId)
+        .collection('progress_history')
+        .orderBy('date', descending: true)
+        .limit(1)
+        .get();
+
+    bool isMidWeek = false;
+    if (historySnapshot.docs.isNotEmpty) {
+      var lastDate = historySnapshot.docs.first.data()['date'] as Timestamp?;
+      if (lastDate != null) {
+        int daysSinceLast = today.difference(lastDate.toDate()).inDays;
+        if (daysSinceLast < 6) {
+          isMidWeek = true;
+        }
+      }
+    }
+
     int totalNetCalories = 0;
     int daysLogged = 0;
     
@@ -32,8 +52,7 @@ class ProgressManager {
         List entries = data['entries'] ?? [];
         
         if (entries.isNotEmpty) {
-          daysLogged++;
-          
+          daysLogged++; 
           int dailyConsumed = 0;
           int dailyBurned = 0;
           
@@ -49,6 +68,24 @@ class ProgressManager {
       }
     }
 
+    DocumentSnapshot userDoc = await FirebaseFirestore.instance.collection('users').doc(userId).get();
+    var userData = userDoc.data() as Map<String, dynamic>;
+    int targetDailyCalories = _asInt(userData['targetCalories']);
+    int weeklyTargetCalories = targetDailyCalories * daysLogged;
+    double performanceRatio = weeklyTargetCalories > 0 ? (totalNetCalories / weeklyTargetCalories) : 0;
+
+    if (isMidWeek) {
+      return {
+        'status': 'mid_week_review',
+        'daysLogged': daysLogged,
+        'avgDailyCalories': daysLogged > 0 ? (totalNetCalories / daysLogged).round() : 0,
+        'targetDailyCalories': targetDailyCalories,
+        'message': performanceRatio > 1.10 
+            ? 'Ενδιάμεσος έλεγχος: Είσαι λίγο πάνω από τον στόχο σου αυτή τη βδομάδα. Προσπάθησε να μαζέψεις τη διαφορά τις επόμενες μέρες!'
+            : 'Ενδιάμεσος έλεγχος: Είσαι ακριβώς μέσα στον στόχο σου! Συνέχισε την καλή δουλειά μέχρι την επίσημη ανασκόπηση.',
+      };
+    }
+
     if (daysLogged < 3) {
       return {
         'status': 'insufficient_data',
@@ -56,16 +93,6 @@ class ProgressManager {
         'message': 'Έχεις καταγράψει δεδομένα μόνο για $daysLogged ημέρες αυτή την εβδομάδα. Προσπάθησε να είσαι πιο συνεπής για να βγάλουμε ασφαλή συμπεράσματα!'
       };
     }
-
-    DocumentSnapshot userDoc = await FirebaseFirestore.instance.collection('users').doc(userId).get();
-    var userData = userDoc.data() as Map<String, dynamic>;
-    
-    int targetDailyCalories = _asInt(userData['targetCalories']);
-    String mainGoal = userData['mainGoal'] ?? 'Συντήρηση';
-    
-    int weeklyTargetCalories = targetDailyCalories * daysLogged;
-    
-    double performanceRatio = totalNetCalories / weeklyTargetCalories;
     
     if (performanceRatio > 1.10) {
        return {
@@ -73,8 +100,8 @@ class ProgressManager {
         'daysLogged': daysLogged,
         'avgDailyCalories': (totalNetCalories / daysLogged).round(),
         'targetDailyCalories': targetDailyCalories,
-        'message': 'Φαίνεται πως αυτή την εβδομάδα δυσκολεύτηκες λίγο με τον στόχο σου. Για να σε βοηθήσουμε να βρεις τον ρυθμό σου, προτείνουμε μια μικρή αύξηση των ημερήσιων θερμίδων ώστε να είναι πιο ρεαλιστικός ο στόχος.',
-        'proposedAdjustment': targetDailyCalories + 150, // Προτείνουμε αύξηση 150 θερμίδων
+        'message': 'Φαίνεται πως αυτή την εβδομάδα δυσκολεύτηκες λίγο. Για να βρεις τον ρυθμό σου, προτείνουμε μια μικρή αύξηση των ημερήσιων θερμίδων ώστε ο στόχος να είναι πιο ρεαλιστικός.',
+        'proposedAdjustment': targetDailyCalories + 150, 
       };
     }
 
@@ -84,7 +111,7 @@ class ProgressManager {
       'avgDailyCalories': (totalNetCalories / daysLogged).round(),
       'targetDailyCalories': targetDailyCalories,
       'message': 'Συγχαρητήρια! Πέτυχες τον στόχο σου αυτή την εβδομάδα. Η συνέπειά σου είναι εξαιρετική!',
-      'achievement': 'Συνεπής Διατροφή 🌟'
+      'achievement': 'Συνεπής Διατροφή' 
     };
   }
 

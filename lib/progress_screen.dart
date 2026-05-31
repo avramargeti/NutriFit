@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'progress_manager.dart';
+import 'progress_history_screen.dart';
 
 class ProgressScreen extends StatefulWidget {
   const ProgressScreen({super.key});
@@ -114,6 +115,18 @@ class _ProgressScreenState extends State<ProgressScreen> {
         backgroundColor: Colors.white,
         foregroundColor: slateGrey,
         elevation: 0,
+        actions: [
+          IconButton(
+            tooltip: 'Πλήρες Ιστορικό',
+            icon: const Icon(Icons.history),
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const ProgressHistoryScreen()),
+              );
+            },
+          )
+        ],
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(20),
@@ -125,6 +138,8 @@ class _ProgressScreenState extends State<ProgressScreen> {
 
             if (status == 'insufficient_data')
               _buildInsufficientDataUI()
+            else if (status == 'mid_week_review')
+              _buildMidWeekUI()
             else if (status == 'goal_met')
               _buildGoalMetUI()
             else if (status == 'goal_not_met')
@@ -186,6 +201,65 @@ class _ProgressScreenState extends State<ProgressScreen> {
     );
   }
 
+  Widget _buildMidWeekUI() {
+    double ratio = _reviewData!['targetDailyCalories'] > 0 
+        ? _reviewData!['avgDailyCalories'] / _reviewData!['targetDailyCalories'] 
+        : 0;
+    bool isOverTarget = ratio > 1.10;
+
+    Color themeColor = isOverTarget ? Colors.orange.shade700 : Colors.blueAccent.shade400;
+    Color bgColor = isOverTarget ? Colors.orange.withValues(alpha: 0.1) : Colors.blueAccent.withValues(alpha: 0.05);
+
+    return Column(
+      children: [
+        _buildStatsRow(),
+        const SizedBox(height: 20),
+        
+        Container(
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            color: bgColor,
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: Column(
+            children: [
+              Icon(
+                isOverTarget ? Icons.trending_up : Icons.query_stats, 
+                size: 60, 
+                color: themeColor
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'Ενδιάμεση Πορεία', 
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: isOverTarget ? themeColor : slateGrey)
+              ),
+              const SizedBox(height: 12),
+              Text(
+                _reviewData!['message'], 
+                textAlign: TextAlign.center, 
+                style: const TextStyle(fontSize: 15, height: 1.5)
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 30),
+        ElevatedButton(
+          style: ElevatedButton.styleFrom(backgroundColor: slateGrey, minimumSize: const Size(double.infinity, 50)),
+          onPressed: () => Navigator.pop(context), 
+          child: const Text('ΚΛΕΙΣΙΜΟ ΑΝΑΦΟΡΑΣ', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        ),
+        const SizedBox(height: 12),
+        TextButton.icon(
+          onPressed: () {
+            Navigator.push(context, MaterialPageRoute(builder: (context) => const ProgressHistoryScreen()));
+          },
+          icon: Icon(Icons.history, size: 18, color: slateGrey),
+          label: Text('Πλήρες Ιστορικό', style: TextStyle(color: slateGrey, decoration: TextDecoration.underline)),
+        )
+      ],
+    );
+  }
+
   Widget _buildGoalMetUI() {
     return Column(
       children: [
@@ -223,6 +297,14 @@ class _ProgressScreenState extends State<ProgressScreen> {
           style: ElevatedButton.styleFrom(backgroundColor: sageGreen, minimumSize: const Size(double.infinity, 50)),
           onPressed: _finishReview,
           child: const Text('ΟΛΟΚΛΗΡΩΣΗ ΑΝΑΣΚΟΠΗΣΗΣ', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        ),
+        const SizedBox(height: 12),
+        TextButton.icon(
+          onPressed: () {
+            Navigator.push(context, MaterialPageRoute(builder: (context) => const ProgressHistoryScreen()));
+          },
+          icon: Icon(Icons.history, size: 18, color: slateGrey),
+          label: Text('Πλήρες Ιστορικό', style: TextStyle(color: slateGrey, decoration: TextDecoration.underline)),
         )
       ],
     );
@@ -277,6 +359,14 @@ class _ProgressScreenState extends State<ProgressScreen> {
         TextButton(
           onPressed: _rejectAdjustmentAndKeepPlan,
           child: Text('Διατήρηση τρέχοντος πλάνου', style: TextStyle(color: slateGrey, decoration: TextDecoration.underline)),
+        ),
+        const SizedBox(height: 12),
+        TextButton.icon(
+          onPressed: () {
+            Navigator.push(context, MaterialPageRoute(builder: (context) => const ProgressHistoryScreen()));
+          },
+          icon: Icon(Icons.history, size: 18, color: slateGrey),
+          label: Text('Πλήρες Ιστορικό', style: TextStyle(color: slateGrey, decoration: TextDecoration.underline)),
         )
       ],
     );
