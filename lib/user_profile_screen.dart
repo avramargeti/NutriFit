@@ -14,28 +14,82 @@ class UserProfileScreen extends StatefulWidget {
 class _UserProfileScreenState extends State<UserProfileScreen> {
   final User? currentUser = FirebaseAuth.instance.currentUser;
   final Color sageGreen = const Color(0xFFA6B39E);
+  
   bool _isSendingRequest = false;
+  
+  bool _isLoadingStatus = true;
+  bool _isFriend = false;
+  bool _hasPendingRequest = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkRelationshipStatus();
+  }
+
+  Future<void> _checkRelationshipStatus() async {
+    if (currentUser == null || currentUser!.uid == widget.targetUserId) {
+      setState(() => _isLoadingStatus = false);
+      return;
+    }
+
+    try {
+      DocumentSnapshot friendDoc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(currentUser!.uid)
+          .collection('friends')
+          .doc(widget.targetUserId)
+          .get();
+
+      if (friendDoc.exists) {
+        setState(() {
+          _isFriend = true;
+          _isLoadingStatus = false;
+        });
+        return;
+      }
+
+      DocumentSnapshot requestDoc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(widget.targetUserId)
+          .collection('friendRequests')
+          .doc(currentUser!.uid)
+          .get();
+
+      if (requestDoc.exists) {
+        setState(() => _hasPendingRequest = true);
+      }
+
+    } catch (e) {
+      debugPrint("Σφάλμα ελέγχου σχέσης: $e");
+    } finally {
+      if (mounted) {
+        setState(() => _isLoadingStatus = false);
+      }
+    }
+  }
 
   Future<void> _sendFriendRequest() async {
     if (currentUser == null) return;
 
-    setState(() {
-      _isSendingRequest = true;
-    });
-
+    setState(() => _isSendingRequest = true);
     final scaffoldMessenger = ScaffoldMessenger.of(context);
 
     try {
       await FirebaseFirestore.instance
           .collection('users')
-          .doc(widget.targetUserId)
-          .collection('friendRequests')
-          .doc(currentUser!.uid)
+          .doc(widget.targetUserId) 
+          .collection('friendRequests') 
+          .doc(currentUser!.uid) 
           .set({
         'fromId': currentUser!.uid,
-        'fromUsername': currentUser!.displayName ?? currentUser!.email,
+        'fromUsername': currentUser!.displayName ?? currentUser!.email, 
         'status': 'pending', 
         'timestamp': FieldValue.serverTimestamp(),
+      });
+
+      setState(() {
+        _hasPendingRequest = true;
       });
 
       scaffoldMessenger.showSnackBar(
@@ -47,9 +101,7 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
       );
     } finally {
       if (mounted) {
-        setState(() {
-          _isSendingRequest = false;
-        });
+        setState(() => _isSendingRequest = false);
       }
     }
   }
@@ -79,7 +131,6 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
           }
 
           var userData = snapshot.data!.data() as Map<String, dynamic>;
-          
           String username = userData['username'] ?? 'Άγνωστο';
           String fullName = userData['fullName'] ?? 'Δεν έχει οριστεί';
           String mainGoal = userData['mainGoal'] ?? 'Δεν έχει οριστεί';
@@ -108,18 +159,24 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
                   const SizedBox(height: 24),
 
                   if (!isOwnProfile)
-                    ElevatedButton.icon(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: sageGreen,
-                        padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 12),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-                      ),
-                      onPressed: _isSendingRequest ? null : _sendFriendRequest,
-                      icon: _isSendingRequest 
-                          ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                          : const Icon(Icons.person_add, color: Colors.white),
-                      label: const Text('Προσθήκη Φίλου', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
-                    ),
+                    _isLoadingStatus
+                        ? const CircularProgressIndicator()
+                        : _isFriend
+                            ? _buildStatusButton(Icons.check_circle, 'Είστε Φίλοι', Colors.green)
+                            : _hasPendingRequest
+                                ? _buildStatusButton(Icons.access_time, 'Εκκρεμεί Αίτημα', Colors.grey)
+                                : ElevatedButton.icon(
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: sageGreen,
+                                      padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 12),
+                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                                    ),
+                                    onPressed: _isSendingRequest ? null : _sendFriendRequest,
+                                    icon: _isSendingRequest
+                                        ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                                        : const Icon(Icons.person_add, color: Colors.white),
+                                    label: const Text('Προσθήκη Φίλου', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+                                  ),
 
                   const SizedBox(height: 32),
                   const Divider(),
@@ -133,6 +190,25 @@ class _UserProfileScreenState extends State<UserProfileScreen> {
             ),
           );
         },
+      ),
+    );
+  }
+
+  Widget _buildStatusButton(IconData icon, String text, Color color) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 12),
+      decoration: BoxDecoration(
+        border: Border.all(color: color, width: 2),
+        borderRadius: BorderRadius.circular(20),
+        color: color.withValues(alpha: 0.1),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, color: color),
+          const SizedBox(width: 8),
+          Text(text, style: TextStyle(color: color, fontSize: 16, fontWeight: FontWeight.bold)),
+        ],
       ),
     );
   }
