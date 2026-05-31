@@ -54,7 +54,11 @@ class _GoalsScreenState extends State<GoalsScreen> {
             selectedSecondary = List<String>.from(userData!['secondaryGoals']);
           }
 
-          _calculateMetrics();
+          _calculateMetrics(); 
+
+          if (userData!['hasSetGoals'] == true && userData!['targetCalories'] != null) {
+            targetCalories = (userData!['targetCalories'] as num).toInt();
+          }
         });
 
         // ΕΛΕΓΧΟΣ ΑΚΡΑΙΟΥ BMI 
