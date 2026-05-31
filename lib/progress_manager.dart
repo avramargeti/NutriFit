@@ -23,8 +23,15 @@ class ProgressManager {
         .get();
 
     bool isMidWeek = false;
+    String? previousMainGoal;
+
     if (historySnapshot.docs.isNotEmpty) {
-      var lastDate = historySnapshot.docs.first.data()['date'] as Timestamp?;
+      var lastDoc = historySnapshot.docs.first.data();
+      var lastDate = lastDoc['date'] as Timestamp?;
+      var lastReport = lastDoc['report'] as Map<String, dynamic>? ?? {};
+      
+      previousMainGoal = lastReport['mainGoal'];
+
       if (lastDate != null) {
         int daysSinceLast = today.difference(lastDate.toDate()).inDays;
         if (daysSinceLast < 6) {
@@ -50,12 +57,9 @@ class ProgressManager {
       if (doc.exists) {
         var data = doc.data() as Map<String, dynamic>;
         List entries = data['entries'] ?? [];
-        
         if (entries.isNotEmpty) {
           daysLogged++; 
-          int dailyConsumed = 0;
-          int dailyBurned = 0;
-          
+          int dailyConsumed = 0, dailyBurned = 0;
           for (var entry in entries) {
             if (entry['isExercise'] == true) {
               dailyBurned += _asInt(entry['calories']);
@@ -71,18 +75,59 @@ class ProgressManager {
     DocumentSnapshot userDoc = await FirebaseFirestore.instance.collection('users').doc(userId).get();
     var userData = userDoc.data() as Map<String, dynamic>;
     int targetDailyCalories = _asInt(userData['targetCalories']);
+    String currentMainGoal = userData['mainGoal'] ?? 'Συντήρηση';
+    
     int weeklyTargetCalories = targetDailyCalories * daysLogged;
     double performanceRatio = weeklyTargetCalories > 0 ? (totalNetCalories / weeklyTargetCalories) : 0;
+
+    if (!isMidWeek && previousMainGoal != null && previousMainGoal != currentMainGoal) {
+      
+      // Πήγε σε Συντήρηση άρα πέτυχε τον στόχο του
+      if (currentMainGoal == 'Διατήρηση & Ευεξία') {
+        return {
+          'status': 'long_term_goal_met',
+          'daysLogged': daysLogged,
+          'mainGoal': currentMainGoal,
+          'message': 'Εντοπίσαμε ότι άλλαξες το πλάνο σου σε "Διατήρηση & Ευεξία". Αυτό σημαίνει ότι ολοκλήρωσες τον τελικό σου στόχο. Η μεταμόρφωσή σου είναι έμπνευση!',
+          'achievement': 'Απόλυτος Νικητής 🏆',
+        };
+      } 
+      else if (currentMainGoal == 'Απώλεια Βάρους (Λίπους)') {
+        return {
+          'status': 'plan_changed_setback',
+          'daysLogged': daysLogged,
+          'mainGoal': currentMainGoal,
+          'message': 'Είδαμε ότι ξεκίνησες πλάνο "Απώλειας Βάρους". Οι διακυμάνσεις είναι απόλυτα φυσιολογικές στο ταξίδι. Είμαστε εδώ για να σε βοηθήσουμε να τα καταφέρεις!',
+        };
+      }
+      else if (currentMainGoal == 'Αύξηση Βάρους & Μυϊκής Μάζας') {
+        return {
+          'status': 'plan_changed_setback',
+          'daysLogged': daysLogged,
+          'mainGoal': currentMainGoal,
+          'message': 'Ώρα για χτίσιμο! Ξεκίνησες πλάνο για "Αύξηση Μυϊκής Μάζας". Δώσε στο σώμα σου τη σωστή ενέργεια, μείνε συνεπής στις προπονήσεις και πάμε δυνατά για νέα ρεκόρ!',
+        };
+      }
+      else if (currentMainGoal == 'Απώλεια Βάρους (Επιλογή Χρήστη)') {
+        return {
+          'status': 'plan_changed_setback',
+          'daysLogged': daysLogged,
+          'mainGoal': currentMainGoal,
+          'message': 'Είδαμε ότι ξεκίνησες πλάνο "Απώλειας Βάρους". Είτε κάνεις μια νέα αρχή, είτε αλλάζεις στρατηγική, είμαστε εδώ για να σε βοηθήσουμε να τα καταφέρεις!',
+        };
+      }
+    }
 
     if (isMidWeek) {
       return {
         'status': 'mid_week_review',
         'daysLogged': daysLogged,
+        'mainGoal': currentMainGoal,
         'avgDailyCalories': daysLogged > 0 ? (totalNetCalories / daysLogged).round() : 0,
         'targetDailyCalories': targetDailyCalories,
         'message': performanceRatio > 1.10 
-            ? 'Ενδιάμεσος έλεγχος: Είσαι λίγο πάνω από τον στόχο σου αυτή τη βδομάδα. Προσπάθησε να μαζέψεις τη διαφορά τις επόμενες μέρες!'
-            : 'Ενδιάμεσος έλεγχος: Είσαι ακριβώς μέσα στον στόχο σου! Συνέχισε την καλή δουλειά μέχρι την επίσημη ανασκόπηση.',
+            ? 'Ενδιάμεσος έλεγχος: Είσαι λίγο πάνω από τον στόχο σου. Πρόσεχε λίγο τις επόμενες μέρες!'
+            : 'Ενδιάμεσος έλεγχος: Είσαι ακριβώς μέσα στον στόχο σου! Συνέχισε έτσι.',
       };
     }
 
@@ -90,7 +135,8 @@ class ProgressManager {
       return {
         'status': 'insufficient_data',
         'daysLogged': daysLogged,
-        'message': 'Έχεις καταγράψει δεδομένα μόνο για $daysLogged ημέρες αυτή την εβδομάδα. Προσπάθησε να είσαι πιο συνεπής για να βγάλουμε ασφαλή συμπεράσματα!'
+        'mainGoal': currentMainGoal,
+        'message': 'Έχεις καταγράψει μόνο $daysLogged ημέρες αυτή την εβδομάδα. Χρειαζόμαστε περισσότερα δεδομένα.'
       };
     }
     
@@ -98,9 +144,10 @@ class ProgressManager {
        return {
         'status': 'goal_not_met',
         'daysLogged': daysLogged,
+        'mainGoal': currentMainGoal,
         'avgDailyCalories': (totalNetCalories / daysLogged).round(),
         'targetDailyCalories': targetDailyCalories,
-        'message': 'Φαίνεται πως αυτή την εβδομάδα δυσκολεύτηκες λίγο. Για να βρεις τον ρυθμό σου, προτείνουμε μια μικρή αύξηση των ημερήσιων θερμίδων ώστε ο στόχος να είναι πιο ρεαλιστικός.',
+        'message': 'Δυσκολεύτηκες λίγο αυτή την εβδομάδα. Προτείνουμε μια μικρή αύξηση θερμίδων για να γίνει ο στόχος πιο εφικτός.',
         'proposedAdjustment': targetDailyCalories + 150, 
       };
     }
@@ -108,9 +155,10 @@ class ProgressManager {
     return {
       'status': 'goal_met',
       'daysLogged': daysLogged,
+      'mainGoal': currentMainGoal,
       'avgDailyCalories': (totalNetCalories / daysLogged).round(),
       'targetDailyCalories': targetDailyCalories,
-      'message': 'Συγχαρητήρια! Πέτυχες τον στόχο σου αυτή την εβδομάδα. Η συνέπειά σου είναι εξαιρετική!',
+      'message': 'Συγχαρητήρια! Πέτυχες τον στόχο σου αυτή την εβδομάδα.',
       'achievement': 'Συνεπής Διατροφή' 
     };
   }

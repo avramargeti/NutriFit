@@ -140,6 +140,10 @@ class _ProgressScreenState extends State<ProgressScreen> {
               _buildInsufficientDataUI()
             else if (status == 'mid_week_review')
               _buildMidWeekUI()
+            else if (status == 'long_term_goal_met')
+              _buildLongTermGoalMetUI()
+            else if (status == 'plan_changed_setback')
+              _buildPlanChangedSetbackUI()
             else if (status == 'goal_met')
               _buildGoalMetUI()
             else if (status == 'goal_not_met')
@@ -368,6 +372,83 @@ class _ProgressScreenState extends State<ProgressScreen> {
           icon: Icon(Icons.history, size: 18, color: slateGrey),
           label: Text('Πλήρες Ιστορικό', style: TextStyle(color: slateGrey, decoration: TextDecoration.underline)),
         )
+      ],
+    );
+  }
+
+  Widget _buildLongTermGoalMetUI() {
+    return Column(
+      children: [
+        Container(
+          padding: const EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(colors: [Colors.amber.shade300, Colors.amber.shade500]),
+            borderRadius: BorderRadius.circular(20),
+            boxShadow: [BoxShadow(color: Colors.amber.withValues(alpha: 0.3), blurRadius: 15)]
+          ),
+          child: Column(
+            children: [
+              const Icon(Icons.workspace_premium, size: 80, color: Colors.white),
+              const SizedBox(height: 16),
+              const Text('ΤΕΛΙΚΟΣ ΣΤΟΧΟΣ ΕΠΕΤΕΥΧΘΗ!', 
+                textAlign: TextAlign.center, 
+                style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: Colors.white)
+              ),
+              const SizedBox(height: 12),
+              Text(_reviewData!['message'], 
+                textAlign: TextAlign.center, 
+                style: const TextStyle(fontSize: 16, color: Colors.white, height: 1.4)
+              ),
+              const SizedBox(height: 16),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20)),
+                child: Text('Επίτευγμα: ${_reviewData!['achievement']}', style: TextStyle(color: Colors.amber.shade800, fontWeight: FontWeight.bold)),
+              )
+            ],
+          ),
+        ),
+        const SizedBox(height: 30),
+        ElevatedButton(
+          style: ElevatedButton.styleFrom(backgroundColor: sageGreen, minimumSize: const Size(double.infinity, 50)),
+          onPressed: _finishReview,
+          child: const Text('ΟΛΟΚΛΗΡΩΣΗ ΑΝΑΣΚΟΠΗΣΗΣ', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildPlanChangedSetbackUI() {
+    return Column(
+      children: [
+        Container(
+          padding: const EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            color: Colors.orange.withValues(alpha: 0.1),
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: Column(
+            children: [
+              Icon(Icons.monitor_weight_outlined, size: 70, color: Colors.orange.shade700),
+              const SizedBox(height: 16),
+              Text('Νέα Αρχή, Ίδιος Στόχος', 
+                textAlign: TextAlign.center, 
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.orange.shade800)
+              ),
+              const SizedBox(height: 12),
+              Text(_reviewData!['message'], 
+                textAlign: TextAlign.center, 
+                style: TextStyle(fontSize: 15, color: Colors.grey.shade800, height: 1.5)
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 30),
+        ElevatedButton(
+          style: ElevatedButton.styleFrom(backgroundColor: sageGreen, minimumSize: const Size(double.infinity, 50)),
+          onPressed: _finishReview,
+          child: const Text('ΣΥΝΕΧΕΙΑ ΣΤΟ ΝΕΟ ΠΛΑΝΟ', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        ),
       ],
     );
   }
