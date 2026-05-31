@@ -43,6 +43,10 @@ class ProgressManager {
     int totalNetCalories = 0;
     int daysLogged = 0;
     
+    int totalExerciseMinutes = 0;
+    int totalSnackCalories = 0;
+    int totalConsumedCalories = 0;
+    
     for (int i = 0; i < 7; i++) {
       DateTime targetDate = today.subtract(Duration(days: i));
       String dateString = DateFormat('yyyy-MM-dd').format(targetDate);
@@ -63,8 +67,15 @@ class ProgressManager {
           for (var entry in entries) {
             if (entry['isExercise'] == true) {
               dailyBurned += _asInt(entry['calories']);
+              totalExerciseMinutes += _asInt(entry['quantity']); 
             } else {
-              dailyConsumed += _asInt(entry['calories']);
+              int cals = _asInt(entry['calories']);
+              dailyConsumed += cals;
+              totalConsumedCalories += cals;
+              
+              if (entry['category'] == 'Σνακ') {
+                totalSnackCalories += cals;
+              }
             }
           }
           totalNetCalories += (dailyConsumed - dailyBurned);
@@ -80,9 +91,15 @@ class ProgressManager {
     int weeklyTargetCalories = targetDailyCalories * daysLogged;
     double performanceRatio = weeklyTargetCalories > 0 ? (totalNetCalories / weeklyTargetCalories) : 0;
 
+    List<String> extraAchievements = [];
+    if (daysLogged == 7) {
+      extraAchievements.add('Απόλυτη Καταγραφή 📝');
+    }
+    if (totalExerciseMinutes >= 150) {
+      extraAchievements.add('Γυμναστηριακός Τύπος 🏋️');
+    }
+
     if (!isMidWeek && previousMainGoal != null && previousMainGoal != currentMainGoal) {
-      
-      // Πήγε σε Συντήρηση άρα πέτυχε τον στόχο του
       if (currentMainGoal == 'Διατήρηση & Ευεξία') {
         return {
           'status': 'long_term_goal_met',
@@ -141,14 +158,24 @@ class ProgressManager {
     }
     
     if (performanceRatio > 1.10) {
-       return {
+      String smartMessage = 'Δυσκολεύτηκες λίγο αυτή την εβδομάδα. Προτείνουμε μια μικρή αύξηση θερμίδων (+150 kcal) για να γίνει ο στόχος σου πιο εφικτός.';
+      
+      if (totalExerciseMinutes < 60) {
+        smartMessage += '\n\n💡 Tip: Παρατηρήσαμε ότι η άσκησή σου ήταν κάτω από 1 ώρα αυτή την εβδομάδα. Δοκίμασε να προσθέσεις 15-20 λεπτά χαλαρό περπάτημα τη μέρα για να πετύχεις τον στόχο σου!';
+      } 
+      else if (totalConsumedCalories > 0 && (totalSnackCalories / totalConsumedCalories) > 0.25) {
+        smartMessage += '\n\n💡 Tip: Πάνω από το 25% των θερμίδων σου προήλθε από Σνακ. Προσπάθησε να αυξήσεις τις μερίδες στα κυρίως γεύματα για να πετύχεις τον στόχο σου!';
+      }
+
+      return {
         'status': 'goal_not_met',
         'daysLogged': daysLogged,
         'mainGoal': currentMainGoal,
         'avgDailyCalories': (totalNetCalories / daysLogged).round(),
         'targetDailyCalories': targetDailyCalories,
-        'message': 'Δυσκολεύτηκες λίγο αυτή την εβδομάδα. Προτείνουμε μια μικρή αύξηση θερμίδων για να γίνει ο στόχος πιο εφικτός.',
+        'message': smartMessage,
         'proposedAdjustment': targetDailyCalories + 150, 
+        'extraAchievements': extraAchievements,
       };
     }
 
@@ -159,7 +186,8 @@ class ProgressManager {
       'avgDailyCalories': (totalNetCalories / daysLogged).round(),
       'targetDailyCalories': targetDailyCalories,
       'message': 'Συγχαρητήρια! Πέτυχες τον στόχο σου αυτή την εβδομάδα.',
-      'achievement': 'Συνεπής Διατροφή' 
+      'achievement': 'Συνεπής Διατροφή',
+      'extraAchievements': extraAchievements,
     };
   }
 
@@ -177,6 +205,27 @@ class ProgressManager {
         .add({
       'date': FieldValue.serverTimestamp(),
       'report': report,
+    });
+    if (report.containsKey('achievement')) {
+      await _awardAchievement(report['achievement']);
+    }
+
+    if (report.containsKey('extraAchievements')) {
+      List<dynamic> extras = report['extraAchievements'];
+      for (var title in extras) {
+        await _awardAchievement(title.toString());
+      }
+    }
+  }
+
+  Future<void> _awardAchievement(String title) async {
+    await FirebaseFirestore.instance
+        .collection('users')
+        .doc(userId)
+        .collection('achievements')
+        .add({
+      'title': title,
+      'earnedAt': FieldValue.serverTimestamp(),
     });
   }
 }
