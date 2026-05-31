@@ -15,6 +15,7 @@ import 'cycle_screen.dart';
 import 'achievements_screen.dart';
 import 'community_feed_screen.dart';
 import 'calendar_screen.dart';
+import 'chatbot_screen.dart';
 
 
 class HomeScreen extends StatefulWidget {
