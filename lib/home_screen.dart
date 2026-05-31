@@ -11,6 +11,8 @@ import 'cooking_book_screen.dart';
 import 'fitness_programs_screen.dart';
 import 'super_market_list_screen.dart';
 import 'fitness_screen.dart';
+import 'achievements_screen.dart';
+import 'community_feed_screen.dart';
 import 'calendar_screen.dart';
 
 
@@ -160,8 +162,44 @@ class _HomeScreenState extends State<HomeScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('NutriFit'),
+        backgroundColor: Colors.transparent,
         elevation: 0,
+        centerTitle: true,
+        leadingWidth: 100,
+        leading: Row(
+          mainAxisAlignment: MainAxisAlignment.start,
+          children: [
+            IconButton(
+              icon: const Icon(Icons.workspace_premium),
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => const AchievementsScreen()),
+                );
+              },
+            ),
+            IconButton(
+              icon: const Icon(Icons.rss_feed),
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => const CommunityFeedScreen()),
+                );
+              },
+            ),
+          ],
+        ),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.shopping_cart_outlined),
+            tooltip: 'Λίστα Super Market',
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const SuperMarketListScreen()),
+              );
+            },
+          ),
           IconButton(
             icon: const Icon(Icons.menu_book),
             tooltip: 'My Cooking Book',
@@ -261,6 +299,7 @@ class _HomeScreenState extends State<HomeScreen> {
               onTap: () => _showRecipesModal(context),
             ),
             const SizedBox(height: 20),
+            
 
             _buildDashboardButton(
               context,
@@ -282,7 +321,7 @@ class _HomeScreenState extends State<HomeScreen> {
               context,
               title: 'FITNESS',
               icon: Icons.fitness_center,
-              color: sageGreen,
+              color: slateGrey,
               onTap: () {
                 Navigator.push(
                   context,
