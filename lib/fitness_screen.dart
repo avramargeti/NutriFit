@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:intl/intl.dart';
 import 'fitness_quiz_screen.dart';
 import 'fitness_programs_screen.dart';
 
@@ -16,19 +17,35 @@ class _FitnessScreenState extends State<FitnessScreen> {
   final Color slateGrey = const Color(0xFF8C9DA6);
 
   bool hasCompletedQuiz = false;
-  bool isCheckingState = true; 
+  bool isCheckingState = true;
+
+  String _weekdayLabel(int weekday) {
+    const labels = {
+      1: 'Δευτέρα',
+      2: 'Τρίτη',
+      3: 'Τετάρτη',
+      4: 'Πέμπτη',
+      5: 'Παρασκευή',
+      6: 'Σάββατο',
+      7: 'Κυριακή',
+    };
+    return labels[weekday] ?? 'Ημέρα';
+  }
 
   @override
   void initState() {
     super.initState();
-    _checkQuizStatus(); 
+    _checkQuizStatus();
   }
 
   Future<void> _checkQuizStatus() async {
     try {
       final user = FirebaseAuth.instance.currentUser;
       if (user != null) {
-        final doc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
+        final doc = await FirebaseFirestore.instance
+            .collection('users')
+            .doc(user.uid)
+            .get();
         if (doc.exists && doc.data()!.containsKey('fitnessPreferences')) {
           setState(() {
             hasCompletedQuiz = true;
@@ -39,14 +56,14 @@ class _FitnessScreenState extends State<FitnessScreen> {
       debugPrint("Σφάλμα κατά τον έλεγχο του προφίλ: $e");
     } finally {
       setState(() {
-        isCheckingState = false; 
+        isCheckingState = false;
       });
     }
   }
 
- Future<void> _addToPlan(Map<String, dynamic> programData) async {
+  Future<void> _addToPlan(Map<String, dynamic> programData) async {
     int baseCalories = programData['estimatedCalories'] ?? 0;
-    int baseDuration = 30; 
+    int baseDuration = 30;
 
     String name = programData['name']?.toString().toLowerCase() ?? '';
     RegExp titleRegExp = RegExp(r"(\d+)\s*(?:'|λεπτά|λεπτα|min)");
@@ -57,11 +74,11 @@ class _FitnessScreenState extends State<FitnessScreen> {
     } else {
       String durationStr = programData['duration']?.toString() ?? '';
       if (durationStr == '< 30 λεπτά') {
-        baseDuration = 25; 
+        baseDuration = 25;
       } else if (durationStr == '30-45 λεπτά') {
-        baseDuration = 40; 
+        baseDuration = 40;
       } else if (durationStr == '> 45 λεπτά') {
-        baseDuration = 50; 
+        baseDuration = 50;
       } else {
         RegExp numRegExp = RegExp(r'(\d+)');
         Match? numMatch = numRegExp.firstMatch(durationStr);
@@ -75,6 +92,9 @@ class _FitnessScreenState extends State<FitnessScreen> {
 
     int selectedMinutes = baseDuration;
     int calculatedCalories = baseCalories;
+    DateTime selectedPlanDate = DateTime.now().add(const Duration(days: 1));
+    String recurrenceType = 'once';
+    int recurrenceWeekday = selectedPlanDate.weekday;
 
     await showDialog(
       context: context,
@@ -82,69 +102,190 @@ class _FitnessScreenState extends State<FitnessScreen> {
         return StatefulBuilder(
           builder: (context, setState) {
             return AlertDialog(
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(20),
+              ),
               title: Row(
                 children: [
                   Icon(Icons.calendar_today, color: sageGreen),
                   const SizedBox(width: 10),
-                  const Expanded(child: Text('Προσθήκη στο Πλάνο', style: TextStyle(fontSize: 18))),
+                  const Expanded(
+                    child: Text(
+                      'Προσθήκη στο Πλάνο',
+                      style: TextStyle(fontSize: 18),
+                    ),
+                  ),
                 ],
               ),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Πρόγραμμα: ${programData['name']}', 
-                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)
-                  ),
-                  const SizedBox(height: 20),
-                  Text('Επίλεξε διάρκεια: $selectedMinutes λεπτά', style: TextStyle(color: slateGrey, fontWeight: FontWeight.bold)),
-                  Slider(
-                    value: selectedMinutes.toDouble(),
-                    min: 10,
-                    max: 120,
-                    divisions: 11, 
-                    activeColor: sageGreen,
-                    inactiveColor: sageGreen.withValues(alpha: 0.3),
-                    onChanged: (val) {
-                      setState(() {
-                        selectedMinutes = val.toInt();
-                        calculatedCalories = ((baseCalories / baseDuration) * selectedMinutes).round();
-                      });
-                    },
-                  ),
-                  const SizedBox(height: 15),
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: Colors.orange.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(color: Colors.orange.withValues(alpha: 0.5))
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Πρόγραμμα: ${programData['name']}',
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                      ),
                     ),
-                    child: Row(
-                      children: [
-                        const Icon(Icons.local_fire_department, color: Colors.orange),
-                        const SizedBox(width: 8),
-                        Text(
-                          'Θα κάψεις ~ $calculatedCalories kcal',
-                          style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.orange),
+                    const SizedBox(height: 20),
+                    Text(
+                      'Ημερομηνία πλάνου',
+                      style: TextStyle(
+                        color: slateGrey,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    OutlinedButton.icon(
+                      onPressed: () async {
+                        final picked = await showDatePicker(
+                          context: context,
+                          initialDate: selectedPlanDate,
+                          firstDate: DateTime.now(),
+                          lastDate: DateTime.now().add(
+                            const Duration(days: 365),
+                          ),
+                        );
+                        if (picked != null) {
+                          setState(() {
+                            selectedPlanDate = picked;
+                            recurrenceWeekday = picked.weekday;
+                          });
+                        }
+                      },
+                      icon: const Icon(Icons.event),
+                      label: Text(
+                        DateFormat('d/M/yyyy').format(selectedPlanDate),
+                      ),
+                    ),
+                    const SizedBox(height: 18),
+                    Text(
+                      'Επανάληψη',
+                      style: TextStyle(
+                        color: slateGrey,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    DropdownButtonFormField<String>(
+                      initialValue: recurrenceType,
+                      decoration: const InputDecoration(
+                        border: OutlineInputBorder(),
+                      ),
+                      items: const [
+                        DropdownMenuItem(
+                          value: 'once',
+                          child: Text('Μία φορά'),
+                        ),
+                        DropdownMenuItem(
+                          value: 'daily',
+                          child: Text('Κάθε μέρα'),
+                        ),
+                        DropdownMenuItem(
+                          value: 'weekly',
+                          child: Text('Εβδομαδιαία'),
                         ),
                       ],
+                      onChanged: (value) {
+                        if (value == null) return;
+                        setState(() => recurrenceType = value);
+                      },
                     ),
-                  ),
-                ],
+                    if (recurrenceType == 'weekly') ...[
+                      const SizedBox(height: 10),
+                      DropdownButtonFormField<int>(
+                        key: ValueKey(recurrenceWeekday),
+                        initialValue: recurrenceWeekday,
+                        decoration: const InputDecoration(
+                          border: OutlineInputBorder(),
+                        ),
+                        items: List.generate(7, (index) {
+                          final weekday = index + 1;
+                          return DropdownMenuItem(
+                            value: weekday,
+                            child: Text(_weekdayLabel(weekday)),
+                          );
+                        }),
+                        onChanged: (value) {
+                          if (value == null) return;
+                          setState(() => recurrenceWeekday = value);
+                        },
+                      ),
+                    ],
+                    const SizedBox(height: 18),
+                    Text(
+                      'Επίλεξε διάρκεια: $selectedMinutes λεπτά',
+                      style: TextStyle(
+                        color: slateGrey,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    Slider(
+                      value: selectedMinutes.toDouble(),
+                      min: 10,
+                      max: 120,
+                      divisions: 11,
+                      activeColor: sageGreen,
+                      inactiveColor: sageGreen.withValues(alpha: 0.3),
+                      onChanged: (val) {
+                        setState(() {
+                          selectedMinutes = val.toInt();
+                          calculatedCalories =
+                              ((baseCalories / baseDuration) * selectedMinutes)
+                                  .round();
+                        });
+                      },
+                    ),
+                    const SizedBox(height: 15),
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.orange.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(
+                          color: Colors.orange.withValues(alpha: 0.5),
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(
+                            Icons.local_fire_department,
+                            color: Colors.orange,
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            'Θα κάψεις ~ $calculatedCalories kcal',
+                            style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: Colors.orange,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
               ),
               actions: [
                 TextButton(
                   onPressed: () => Navigator.pop(context),
-                  child: const Text('ΑΚΥΡΩΣΗ', style: TextStyle(color: Colors.grey, fontWeight: FontWeight.bold)),
+                  child: const Text(
+                    'ΑΚΥΡΩΣΗ',
+                    style: TextStyle(
+                      color: Colors.grey,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
                 ),
                 ElevatedButton(
                   style: ElevatedButton.styleFrom(
                     backgroundColor: sageGreen,
                     foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
                   ),
                   onPressed: () async {
                     final user = FirebaseAuth.instance.currentUser;
@@ -155,30 +296,44 @@ class _FitnessScreenState extends State<FitnessScreen> {
                             .doc(user.uid)
                             .collection('my_plan')
                             .add({
-                          'programName': programData['name'],
-                          'category': programData['category'],
-                          'durationMinutes': selectedMinutes,
-                          'expectedCalories': calculatedCalories,
-                          'addedAt': FieldValue.serverTimestamp(),
-                          'status': 'Εκκρεμεί', 
-                        });
-                        
+                              'programName': programData['name'],
+                              'category': programData['category'],
+                              'durationMinutes': selectedMinutes,
+                              'expectedCalories': calculatedCalories,
+                              'plannedDateString': DateFormat(
+                                'yyyy-MM-dd',
+                              ).format(selectedPlanDate),
+                              'plannedDate': Timestamp.fromDate(
+                                selectedPlanDate,
+                              ),
+                              'recurrenceType': recurrenceType,
+                              'recurrenceWeekday': recurrenceWeekday,
+                              'addedAt': FieldValue.serverTimestamp(),
+                              'status': 'Προγραμματισμένο',
+                            });
+
                         if (!context.mounted) return;
-                          Navigator.pop(context, true);
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: const Text('Επιτυχής προσθήκη στο προσωπικό πλάνο!'),
-                              backgroundColor: sageGreen,
-                              behavior: SnackBarBehavior.floating,
+                        Navigator.pop(context, true);
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: const Text(
+                              'Επιτυχής προσθήκη στο προσωπικό πλάνο!',
                             ),
-                          );
-                        
+                            backgroundColor: sageGreen,
+                            behavior: SnackBarBehavior.floating,
+                          ),
+                        );
                       } catch (e) {
-                        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Σφάλμα αποθήκευσης: $e')));
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text('Σφάλμα αποθήκευσης: $e')),
+                        );
                       }
                     }
                   },
-                  child: const Text('ΕΠΙΒΕΒΑΙΩΣΗ', style: TextStyle(fontWeight: FontWeight.bold)),
+                  child: const Text(
+                    'ΕΠΙΒΕΒΑΙΩΣΗ',
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
                 ),
               ],
             );
@@ -198,7 +353,9 @@ class _FitnessScreenState extends State<FitnessScreen> {
       builder: (context) => Padding(
         padding: EdgeInsets.only(
           bottom: MediaQuery.of(context).viewInsets.bottom + 24,
-          left: 24, right: 24, top: 24,
+          left: 24,
+          right: 24,
+          top: 24,
         ),
         child: BasicFitnessQuiz(
           onCompleted: () {
@@ -208,7 +365,8 @@ class _FitnessScreenState extends State<FitnessScreen> {
             Navigator.push(
               context,
               MaterialPageRoute(
-                builder: (context) => const FitnessProgramsScreen(viewAll: false),
+                builder: (context) =>
+                    const FitnessProgramsScreen(viewAll: false),
               ),
             );
           },
@@ -223,18 +381,25 @@ class _FitnessScreenState extends State<FitnessScreen> {
       builder: (context) => AlertDialog(
         title: const Text('Επανάληψη Κουίζ'),
         content: const Text(
-            'Έχετε ήδη συμπληρώσει το κουίζ.\n\nΕίστε σίγουροι ότι θέλετε να το επαναλάβετε; Αν το κάνετε, τα προτεινόμενα προγράμματα γυμναστικής σας θα αλλάξουν βάσει των νέων απαντήσεων.'),
+          'Έχετε ήδη συμπληρώσει το κουίζ.\n\nΕίστε σίγουροι ότι θέλετε να το επαναλάβετε; Αν το κάνετε, τα προτεινόμενα προγράμματα γυμναστικής σας θα αλλάξουν βάσει των νέων απαντήσεων.',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('ΑΚΥΡΩΣΗ', style: TextStyle(fontWeight: FontWeight.bold)),
+            child: const Text(
+              'ΑΚΥΡΩΣΗ',
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
           ),
           TextButton(
             onPressed: () {
-              Navigator.pop(context); 
-              _showQuiz(); 
+              Navigator.pop(context);
+              _showQuiz();
             },
-            child: const Text('ΣΥΝΕΧΕΙΑ', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
+            child: const Text(
+              'ΣΥΝΕΧΕΙΑ',
+              style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold),
+            ),
           ),
         ],
       ),
@@ -244,12 +409,9 @@ class _FitnessScreenState extends State<FitnessScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Fitness'),
-        elevation: 0,
-      ),
-      body: isCheckingState 
-          ? Center(child: CircularProgressIndicator(color: sageGreen)) 
+      appBar: AppBar(title: const Text('Fitness'), elevation: 0),
+      body: isCheckingState
+          ? Center(child: CircularProgressIndicator(color: sageGreen))
           : SingleChildScrollView(
               padding: const EdgeInsets.all(24.0),
               child: Column(
@@ -257,9 +419,9 @@ class _FitnessScreenState extends State<FitnessScreen> {
                 children: [
                   Icon(Icons.sports_gymnastics, size: 80, color: sageGreen),
                   const SizedBox(height: 20),
-                  
+
                   Text(
-                    hasCompletedQuiz 
+                    hasCompletedQuiz
                         ? 'Έχετε ήδη βρει τα προγράμματα που σας ταιριάζουν!'
                         : 'Βρες το κατάλληλο πρόγραμμα γυμναστικής για εσένα!',
                     textAlign: TextAlign.center,
@@ -285,13 +447,17 @@ class _FitnessScreenState extends State<FitnessScreen> {
                       icon: const Icon(Icons.star, size: 26),
                       label: const Text(
                         'ΤΑ ΠΡΟΤΕΙΝΟΜΕΝΑ ΜΟΥ',
-                        style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
+                        style: TextStyle(
+                          fontSize: 17,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
                       onPressed: () {
                         Navigator.push(
                           context,
                           MaterialPageRoute(
-                            builder: (context) => const FitnessProgramsScreen(viewAll: false),
+                            builder: (context) =>
+                                const FitnessProgramsScreen(viewAll: false),
                           ),
                         );
                       },
@@ -309,9 +475,12 @@ class _FitnessScreenState extends State<FitnessScreen> {
                       icon: const Icon(Icons.refresh, size: 26),
                       label: const Text(
                         'ΕΠΑΝΑΛΗΨΗ ΚΟΥΙΖ',
-                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
-                      onPressed: _retakeQuizWithWarning, 
+                      onPressed: _retakeQuizWithWarning,
                     ),
                   ] else ...[
                     ElevatedButton.icon(
@@ -327,9 +496,12 @@ class _FitnessScreenState extends State<FitnessScreen> {
                       icon: const Icon(Icons.psychology_alt, size: 26),
                       label: const Text(
                         'ΒΡΕΣ ΤΙ ΣΟΥ ΤΑΙΡΙΑΖΕΙ',
-                        style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
+                        style: TextStyle(
+                          fontSize: 17,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
-                      onPressed: _showQuiz, 
+                      onPressed: _showQuiz,
                     ),
                   ],
 
@@ -347,34 +519,45 @@ class _FitnessScreenState extends State<FitnessScreen> {
                     icon: const Icon(Icons.list_alt, size: 26),
                     label: const Text(
                       'ΠΡΟΒΟΛΗ ΟΛΩΝ ΤΩΝ ΠΡΟΓΡΑΜΜΑΤΩΝ',
-                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                     onPressed: () {
                       Navigator.push(
                         context,
                         MaterialPageRoute(
-                          builder: (context) => const FitnessProgramsScreen(viewAll: true),
+                          builder: (context) =>
+                              const FitnessProgramsScreen(viewAll: true),
                         ),
                       );
                     },
                   ),
-                  
+
                   const SizedBox(height: 40),
-                  
+
                   Row(
                     children: [
-                      Icon(Icons.local_fire_department, color: Colors.orange.shade700),
+                      Icon(
+                        Icons.local_fire_department,
+                        color: Colors.orange.shade700,
+                      ),
                       const SizedBox(width: 8),
                       Text(
                         'Top 10 (Καύση Θερμίδων)',
-                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: slateGrey),
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: slateGrey,
+                        ),
                       ),
                     ],
                   ),
                   const SizedBox(height: 15),
-                  
+
                   SizedBox(
-                    height: 220, 
+                    height: 220,
                     child: StreamBuilder<QuerySnapshot>(
                       stream: FirebaseFirestore.instance
                           .collection('fitness_programs')
@@ -382,8 +565,11 @@ class _FitnessScreenState extends State<FitnessScreen> {
                           .limit(10)
                           .snapshots(),
                       builder: (context, snapshot) {
-                        if (snapshot.connectionState == ConnectionState.waiting) {
-                          return Center(child: CircularProgressIndicator(color: sageGreen));
+                        if (snapshot.connectionState ==
+                            ConnectionState.waiting) {
+                          return Center(
+                            child: CircularProgressIndicator(color: sageGreen),
+                          );
                         }
 
                         if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
@@ -399,7 +585,9 @@ class _FitnessScreenState extends State<FitnessScreen> {
                           scrollDirection: Axis.horizontal,
                           itemCount: snapshot.data!.docs.length,
                           itemBuilder: (context, index) {
-                            final data = snapshot.data!.docs[index].data() as Map<String, dynamic>;
+                            final data =
+                                snapshot.data!.docs[index].data()
+                                    as Map<String, dynamic>;
                             return _buildTop10Card(data, index + 1);
                           },
                         );
@@ -439,7 +627,14 @@ class _FitnessScreenState extends State<FitnessScreen> {
               CircleAvatar(
                 radius: 12,
                 backgroundColor: sageGreen,
-                child: Text('#$rank', style: const TextStyle(fontSize: 11, color: Colors.white, fontWeight: FontWeight.bold)),
+                child: Text(
+                  '#$rank',
+                  style: const TextStyle(
+                    fontSize: 11,
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
               ),
               Icon(Icons.bolt, color: Colors.orange.shade400, size: 20),
             ],
@@ -459,7 +654,11 @@ class _FitnessScreenState extends State<FitnessScreen> {
           const SizedBox(height: 6),
           Text(
             '🔥 ${data['estimatedCalories'] ?? '0'} kcal',
-            style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.redAccent, fontSize: 13),
+            style: const TextStyle(
+              fontWeight: FontWeight.bold,
+              color: Colors.redAccent,
+              fontSize: 13,
+            ),
           ),
           const SizedBox(height: 10),
           SizedBox(
@@ -471,10 +670,15 @@ class _FitnessScreenState extends State<FitnessScreen> {
                 foregroundColor: Colors.white,
                 padding: EdgeInsets.zero,
                 elevation: 0,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
               ),
               onPressed: () => _addToPlan(data),
-              child: const Text('Προσθήκη', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+              child: const Text(
+                'Προσθήκη',
+                style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+              ),
             ),
           ),
         ],
