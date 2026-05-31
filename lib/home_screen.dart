@@ -305,23 +305,6 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
             const SizedBox(height: 20),
             
-
-            _buildDashboardButton(
-              context,
-              title: 'ΛΙΣΤΑ SUPER MARKET',
-              icon: Icons.shopping_cart_outlined,
-              color: slateGrey,
-              onTap: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => const SuperMarketListScreen(),
-                  ),
-                );
-              },
-            ),
-            const SizedBox(height: 20),
-
             _buildDashboardButton(
               context,
               title: 'FITNESS',
