@@ -200,6 +200,16 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
         actions: [
           IconButton(
+            icon: const Icon(Icons.shopping_cart_outlined),
+            tooltip: 'Λίστα Super Market',
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const SuperMarketListScreen()),
+              );
+            },
+          ),
+          IconButton(
             icon: const Icon(Icons.menu_book),
             tooltip: 'My Cooking Book',
             onPressed: () {
@@ -296,27 +306,12 @@ class _HomeScreenState extends State<HomeScreen> {
               onTap: () => _showRecipesModal(context),
             ),
             const SizedBox(height: 20),
-
-            // --- ΝΕΟ ΚΟΥΜΠΙ: ΛΙΣΤΑ SUPER MARKET ---
-            _buildDashboardButton(
-              context,
-              title: 'ΛΙΣΤΑ SUPER MARKET',
-              icon: Icons.shopping_cart_outlined,
-              color: slateGrey,
-              onTap: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (context) => const SuperMarketListScreen()),
-                );
-              },
-            ),
-            const SizedBox(height: 20),
             
             _buildDashboardButton(
               context,
               title: 'FITNESS',
               icon: Icons.fitness_center,
-              color: sageGreen,
+              color: slateGrey,
               onTap: () {
                 Navigator.push(
                   context,

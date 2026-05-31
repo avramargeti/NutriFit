@@ -39,6 +39,9 @@ class _MemberSearchScreenState extends State<MemberSearchScreen> {
   ];
 
   Future<void> _searchMembers() async {
+
+    final scaffoldMessenger = ScaffoldMessenger.of(context);
+
     setState(() {
       _isLoading = true;
       _hasSearched = true;
@@ -68,15 +71,17 @@ class _MemberSearchScreenState extends State<MemberSearchScreen> {
         _searchResults = querySnapshot.docs.where((doc) => doc.id != currentUser?.uid).toList();
       });
     } catch (e) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
+      if (mounted) {
+        scaffoldMessenger.showSnackBar(
           SnackBar(content: Text('Σφάλμα αναζήτησης: $e')),
         );
       }
     } finally {
-      setState(() {
-        _isLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
     }
   }
 
@@ -116,7 +121,7 @@ class _MemberSearchScreenState extends State<MemberSearchScreen> {
             const SizedBox(height: 12),
 
             DropdownButtonFormField<String>(
-              value: _selectedGoal,
+              initialValue: _selectedGoal,
               decoration: InputDecoration(
                 labelText: 'Φίλτρο με βάση τον Στόχο',
                 prefixIcon: const Icon(Icons.track_changes),
@@ -135,7 +140,7 @@ class _MemberSearchScreenState extends State<MemberSearchScreen> {
             const SizedBox(height: 12),
 
             DropdownButtonFormField<String>(
-              value: _selectedDietType,
+              initialValue: _selectedDietType,
               decoration: InputDecoration(
                 labelText: 'Φίλτρο με βάση τη Διατροφή',
                 prefixIcon: const Icon(Icons.restaurant_menu),

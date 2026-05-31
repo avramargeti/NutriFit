@@ -96,7 +96,7 @@ class _CommunityFeedScreenState extends State<CommunityFeedScreen> {
 
                         return ListTile(
                           leading: CircleAvatar(
-                            backgroundColor: sageGreen.withOpacity(0.2),
+                            backgroundColor: sageGreen.withValues(alpha: 0.2),
                             backgroundImage: (imageUrl != null && imageUrl.isNotEmpty) 
                                 ? NetworkImage(imageUrl) 
                                 : null,
@@ -332,7 +332,6 @@ class _CommunityFeedScreenState extends State<CommunityFeedScreen> {
                         var msgData = messages[index].data() as Map<String, dynamic>;
                         String fromUsername = msgData['fromUsername'] ?? 'Κάποιος';
                         String recipeTitle = msgData['recipeTitle'] ?? 'Συνταγή';
-                        String fromId = msgData['fromId'] ?? '';
                         String recipeId = msgData['recipeId'] ?? '';
                         String messageDocId = messages[index].id;
                         String? imageUrl = msgData['imageUrl'];
@@ -340,7 +339,7 @@ class _CommunityFeedScreenState extends State<CommunityFeedScreen> {
                         return ListTile(
                           contentPadding: EdgeInsets.zero,
                           leading: CircleAvatar(
-                            backgroundColor: sageGreen.withOpacity(0.2),
+                            backgroundColor: sageGreen.withValues(alpha: 0.2),
                             backgroundImage: (imageUrl != null && imageUrl.isNotEmpty) 
                                 ? NetworkImage(imageUrl) 
                                 : null,
