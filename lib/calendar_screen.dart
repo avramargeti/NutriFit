@@ -4,6 +4,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:intl/intl.dart';
 import 'fitness_programs_screen.dart';
 import 'meal_selection_screen.dart';
+import 'progress_screen.dart';
 
 class CalendarScreen extends StatefulWidget {
   const CalendarScreen({super.key});
@@ -638,6 +639,16 @@ class _CalendarScreenState extends State<CalendarScreen> {
         foregroundColor: slateGrey,
         elevation: 0,
         actions: [
+          IconButton(
+            tooltip: 'Ανασκόπηση & Πρόοδος',
+            icon: const Icon(Icons.analytics_outlined, size: 28),
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const ProgressScreen()),
+              );
+            },
+          ),
           IconButton(
             tooltip: 'Προβολή ημερολογίου',
             icon: const Icon(Icons.calendar_month),
