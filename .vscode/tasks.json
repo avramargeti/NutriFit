@@ -1,0 +1,18 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Install Functions Dependencies",
+      "type": "shell",
+      "command": "npm --prefix functions install",
+      "problemMatcher": []
+    },
+    {
+      "label": "Start Firebase Functions Emulator",
+      "type": "shell",
+      "command": "npm --prefix functions run serve",
+      "isBackground": true,
+      "problemMatcher": []
+    }
+  ]
+}

@@ -4,10 +4,13 @@
     {
       "name": "NutriFit",
       "request": "launch",
+      "type": "dart"
+    },
+    {
+      "name": "NutriFit Web - Local API",
+      "request": "launch",
       "type": "dart",
-      "toolArgs": [
-        "--dart-define=NUTRIFIT_AI_ENDPOINT=http://127.0.0.1:5001/nutrifit-project-2026/us-central1/askNutriFitAi"
-      ]
+      "deviceId": "chrome"
     }
   ]
 }

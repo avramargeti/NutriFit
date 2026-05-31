@@ -76,61 +76,55 @@ class ChatbotController extends ChangeNotifier {
   }
 
   Future<void> analyzeQuestion(String query) async {
-  if (query.trim().isEmpty || isLoading) return;
+    final trimmedQuery = query.trim();
+    if (trimmedQuery.isEmpty || isLoading) return;
 
-  currentMessages.add(ChatMessage(text: query, type: MessageType.user));
-  isLoading = true;
-  notifyListeners();
+    currentMessages.add(
+      ChatMessage(text: trimmedQuery, type: MessageType.user),
+    );
+    isLoading = true;
+    notifyListeners();
 
-  if (checkTopic(query)) {
-    rejectAndReturnConstraints();
-  } else {
-    if (!checkUnderstanding(query)) {
-      handleUnderstandingError();
-    } else {
-      final intent = _localDataRepository.normalize(query);
-      final localData = await _localDataRepository.retrieveInformation(intent);
-
-      dynamic responseData;
-      MessageType responseType = MessageType.bot;
-
-      if (localData != null) {
-        responseData = localData;
-        responseType = MessageType.bot; // Local database response
-      } else {
-        try {
-          responseData = await _aiApiClient.callExternalAPI(query);
-          responseType = MessageType.externalAi; // API / Gemini response
-        } catch (e) {
-          cancelProcess();
-          connectionProblem();
-          isLoading = false;
-          notifyListeners();
-          return;
-        }
-      }
-
-      final finalResponse = synthesizeResponse(
-        responseData,
-        type: responseType,
-      );
-
+    try {
+      final finalResponse = await _buildResponseFor(trimmedQuery);
       currentMessages.add(finalResponse);
-
-      currentChatId = await _historyRepository.saveConversation(
-        userId: _userId,
-        query: query,
-        response: finalResponse.text,
-        chatId: currentChatId,
-        title: _buildSessionTitle(),
-        allMessages: currentMessages,
-      );
+      await _saveConversation(trimmedQuery, finalResponse);
+    } finally {
+      isLoading = false;
+      notifyListeners();
     }
   }
 
-  isLoading = false;
-  notifyListeners();
-}
+  Future<ChatMessage> _buildResponseFor(String query) async {
+    if (checkTopic(query)) {
+      return _constraintMessage();
+    }
+
+    if (!checkUnderstanding(query)) {
+      return _rephraseMessage();
+    }
+
+    final intent = _localDataRepository.normalize(query);
+    String? localData;
+
+    try {
+      localData = await _localDataRepository.retrieveInformation(intent);
+    } catch (error) {
+      debugPrint("Σφάλμα ανάκτησης τοπικών δεδομένων chatbot: $error");
+    }
+
+    if (localData != null) {
+      return synthesizeResponse(localData);
+    }
+
+    try {
+      final externalResponse = await _aiApiClient.callExternalAPI(query);
+      return synthesizeResponse(externalResponse, type: MessageType.externalAi);
+    } on AiApiException catch (error) {
+      cancelProcess();
+      return _externalAiErrorMessage(error);
+    }
+  }
 
   bool checkTopic(String query) {
     final normalizedText = _localDataRepository.normalize(query);
@@ -148,12 +142,15 @@ class ChatbotController extends ChangeNotifier {
   }
 
   void rejectAndReturnConstraints() {
-    currentMessages.add(
-      ChatMessage(
-        text:
-            "Παρακαλώ περιορίστε τις ερωτήσεις σας σε θέματα διατροφής, ευεξίας και γυμναστικής.",
-        type: MessageType.constraint,
-      ),
+    currentMessages.add(_constraintMessage());
+  }
+
+  ChatMessage _constraintMessage() {
+    return ChatMessage(
+      text:
+          "Παρακαλώ περιορίστε τις ερωτήσεις σας σε θέματα διατροφής, "
+          "ευεξίας και γυμναστικής.",
+      type: MessageType.constraint,
     );
   }
 
@@ -164,12 +161,15 @@ class ChatbotController extends ChangeNotifier {
   }
 
   void handleUnderstandingError() {
-    currentMessages.add(
-      ChatMessage(
-        text:
-            "Δεν μπόρεσα να καταλάβω το μήνυμά σας. Μπορείτε να το αναδιατυπώσετε;",
-        type: MessageType.rephrase,
-      ),
+    currentMessages.add(_rephraseMessage());
+  }
+
+  ChatMessage _rephraseMessage() {
+    return ChatMessage(
+      text:
+          "Δεν μπόρεσα να καταλάβω το μήνυμά σας. "
+          "Μπορείτε να το αναδιατυπώσετε;",
+      type: MessageType.rephrase,
     );
   }
 
@@ -179,23 +179,72 @@ class ChatbotController extends ChangeNotifier {
 
   void connectionProblem() {
     currentMessages.add(
-      ChatMessage(
-        text:
-            "Υπήρξε πρόβλημα σύνδεσης με την εξωτερική υπηρεσία AI. Δοκίμασε ξανά σε λίγο.",
-        type: MessageType.connectionError,
+      _externalAiErrorMessage(
+        AiApiException(
+          "Υπήρξε πρόβλημα σύνδεσης με την εξωτερική υπηρεσία AI. "
+          "Δοκίμασε ξανά σε λίγο.",
+          code: "connection_error",
+        ),
       ),
     );
   }
 
   ChatMessage synthesizeResponse(
-  dynamic data, {
-  MessageType type = MessageType.bot,
-}) {
-  return ChatMessage(
-    text: data.toString(),
-    type: type,
-  );
-}
+    dynamic data, {
+    MessageType type = MessageType.bot,
+  }) {
+    return ChatMessage(text: data.toString(), type: type);
+  }
+
+  ChatMessage _externalAiErrorMessage(AiApiException error) {
+    final text = switch (error.code) {
+      'provider_config_missing' =>
+        "Η υπηρεσία AI δεν έχει ρυθμιστεί. Έλεγξε το GEMINI_API_KEY "
+            "στο functions/.env και ξανατρέξε τον emulator.",
+      'invalid_api_key' =>
+        "Το Gemini API key δεν είναι έγκυρο. Έλεγξε το GEMINI_API_KEY "
+            "στο functions/.env.",
+      'resource_exhausted' =>
+        "Το Gemini API έφτασε προσωρινά το διαθέσιμο quota ή rate limit. "
+            "Δοκίμασε αργότερα.",
+      'invalid_request' =>
+        "Το αίτημα προς το Gemini API δεν έγινε δεκτό. Έλεγξε το "
+            "GEMINI_MODEL στο functions/.env.",
+      'timeout' =>
+        "Η εξωτερική υπηρεσία AI άργησε να απαντήσει. Δοκίμασε ξανά.",
+      _ =>
+        error.message.isNotEmpty
+            ? error.message
+            : "Υπήρξε πρόβλημα σύνδεσης με την εξωτερική υπηρεσία AI. "
+                  "Δοκίμασε ξανά σε λίγο.",
+    };
+
+    return ChatMessage(text: text, type: MessageType.connectionError);
+  }
+
+  Future<void> _saveConversation(
+    String query,
+    ChatMessage finalResponse,
+  ) async {
+    if (_userId.isEmpty) {
+      debugPrint("Παράλειψη αποθήκευσης συνομιλίας: δεν υπάρχει userId.");
+      return;
+    }
+
+    try {
+      currentChatId = await _historyRepository.saveConversation(
+        userId: _userId,
+        query: query,
+        response: finalResponse.text,
+        chatId: currentChatId,
+        title: _buildSessionTitle(),
+        allMessages: currentMessages,
+      );
+      history = await _historyRepository.fetchHistory(_userId);
+    } catch (error) {
+      debugPrint("Σφάλμα αποθήκευσης ιστορικού chatbot: $error");
+    }
+  }
 
   String _buildSessionTitle() {
     for (final message in currentMessages) {

@@ -11,7 +11,7 @@ import 'cooking_book_screen.dart';
 import 'fitness_programs_screen.dart';
 import 'super_market_list_screen.dart';
 import 'fitness_screen.dart';
-import 'chatbot_screen.dart';
+import 'chatbot_fab.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -188,6 +188,9 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ],
       ),
+
+      floatingActionButton: const ChatbotFab(),
+      floatingActionButtonLocation: FloatingActionButtonLocation.startFloat,
 
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(24.0),

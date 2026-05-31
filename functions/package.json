@@ -3,9 +3,9 @@
   "description": "Cloud Functions for Firebase",
   "scripts": {
     "lint": "eslint .",
-    "serve": "firebase emulators:start --only functions",
-    "deploy": "firebase deploy --only functions",
-    "logs": "firebase functions:log"
+    "serve": "npx -y firebase-tools@latest emulators:start --only functions",
+    "deploy": "npx -y firebase-tools@latest deploy --only functions",
+    "logs": "npx -y firebase-tools@latest functions:log"
   },
   "engines": {
     "node": "20"
