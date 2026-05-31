@@ -1,6 +1,7 @@
 enum MessageType {
   user,
   bot,
+  externalAi,
   error,
   constraint,
   rephrase,

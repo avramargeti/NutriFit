@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
@@ -7,20 +5,14 @@ import 'ai_api_client.dart';
 import 'chat_history_repository.dart';
 import 'chatbot_models.dart';
 import 'local_data_repository.dart';
-
 export 'chatbot_models.dart';
-export 'local_data_repository.dart';
 
 class ChatbotController extends ChangeNotifier {
-  ChatbotController({
-    FirebaseAuth? auth,
-    ChatHistoryRepository? historyRepository,
-    LocalDataRepository? localDataRepository,
-    AiApiClient? aiApiClient,
-  })  : _auth = auth ?? FirebaseAuth.instance,
-        _historyRepository = historyRepository ?? ChatHistoryRepository(),
-        _localDataRepository = localDataRepository ?? LocalDataRepository(),
-        _aiApiClient = aiApiClient ?? AiApiClient();
+  ChatbotController()
+    : _auth = FirebaseAuth.instance,
+      _historyRepository = ChatHistoryRepository(),
+      _localDataRepository = LocalDataRepository(),
+      _aiApiClient = AiApiClient();
 
   final FirebaseAuth _auth;
   final ChatHistoryRepository _historyRepository;
@@ -33,29 +25,21 @@ class ChatbotController extends ChangeNotifier {
   bool showSelectionScreen = false;
   String? currentChatId;
 
-  Future<void> initializeHistory() async {
+  String get _userId => _auth.currentUser?.uid ?? '';
+
+  Future<void> checkHistory(String userId) async {
     isLoading = true;
     notifyListeners();
 
-    await _localDataRepository.loadData();
-    final user = _auth.currentUser;
-
-    if (user != null) {
-      try {
-        history = await _historyRepository.fetchHistory();
-      } catch (e) {
-        debugPrint("Σφάλμα φόρτωσης ιστορικού: $e");
-      }
-    } else {
-      history = [];
-      currentChatId = null;
+    if (userId.isNotEmpty) {
+      history = await _historyRepository.fetchHistory(userId);
     }
 
     if (history.isEmpty) {
       showSelectionScreen = false;
       currentMessages = [
         ChatMessage(
-          text: "Καλώς ήρθατε στο NutriFit Assistant! Μπορώ να αναζητήσω συνταγές, υλικά, macros, θερμίδες, προγράμματα γυμναστικής και στοιχεία από το προφίλ σας. Πώς μπορώ να βοηθήσω;",
+          text: "Καλώς ήρθατε στο NutriFit Assistant! Πώς μπορώ να βοηθήσω;",
           type: MessageType.bot,
         ),
       ];
@@ -63,7 +47,6 @@ class ChatbotController extends ChangeNotifier {
       showSelectionScreen = true;
       currentMessages = [];
     }
-
     isLoading = false;
     notifyListeners();
   }
@@ -73,66 +56,84 @@ class ChatbotController extends ChangeNotifier {
     currentChatId = null;
     currentMessages = [
       ChatMessage(
-        text: "Γεια σας! Είμαι ο προσωπικός σας βοηθός NutriFit. Πώς μπορώ να σας βοηθήσω σήμερα;",
+        text: "Γεια σας! Είμαι ο βοηθός NutriFit. Πώς μπορώ να σας βοηθήσω;",
         type: MessageType.bot,
       ),
     ];
     notifyListeners();
   }
 
-  void loadChat(String id) {
-    final session = history.firstWhere((s) => s.id == id);
-    showSelectionScreen = false;
-    currentChatId = session.id;
-    currentMessages = List<ChatMessage>.from(session.messages);
-    notifyListeners();
-  }
-
-  Future<void> processUserQuery(String text) async {
-    final query = text.trim();
-    if (query.isEmpty || isLoading) return;
-
-    currentMessages.add(ChatMessage(text: query, type: MessageType.user));
+  Future<void> loadChat(String chatId) async {
     isLoading = true;
     notifyListeners();
 
-    try {
-      await _localDataRepository.loadData(forceRefresh: true);
-      final normalizedText = _localDataRepository.normalize(query);
-      late final ChatMessage response;
+    currentChatId = chatId;
+    showSelectionScreen = false;
+    currentMessages = await _historyRepository.fetchMessages(_userId, chatId);
 
-      if (_isOutOfTopic(normalizedText)) {
-        response = ChatMessage(
-          text: "Παρακαλώ περιορίστε τις ερωτήσεις σας σε θέματα διατροφής, ευεξίας και γυμναστικής.",
-          type: MessageType.constraint,
-        );
-      } else if (_localDataRepository.isGibberish(query) ||
-          _understandingFailed(normalizedText)) {
-        response = ChatMessage(
-          text: "Δεν μπόρεσα να καταλάβω το μήνυμά σας. Μπορείτε να το αναδιατυπώσετε με περισσότερες λεπτομέρειες;",
-          type: MessageType.rephrase,
-        );
+    isLoading = false;
+    notifyListeners();
+  }
+
+  Future<void> analyzeQuestion(String query) async {
+  if (query.trim().isEmpty || isLoading) return;
+
+  currentMessages.add(ChatMessage(text: query, type: MessageType.user));
+  isLoading = true;
+  notifyListeners();
+
+  if (checkTopic(query)) {
+    rejectAndReturnConstraints();
+  } else {
+    if (!checkUnderstanding(query)) {
+      handleUnderstandingError();
+    } else {
+      final intent = _localDataRepository.normalize(query);
+      final localData = await _localDataRepository.retrieveInformation(intent);
+
+      dynamic responseData;
+      MessageType responseType = MessageType.bot;
+
+      if (localData != null) {
+        responseData = localData;
+        responseType = MessageType.bot; // Local database response
       } else {
-        final localResponse = _localDataRepository.retrieveInformation(normalizedText);
-
-        if (localResponse != null) {
-          response = ChatMessage(text: localResponse, type: MessageType.bot);
-        } else {
-          response = await _askExternalAi(query);
+        try {
+          responseData = await _aiApiClient.callExternalAPI(query);
+          responseType = MessageType.externalAi; // API / Gemini response
+        } catch (e) {
+          cancelProcess();
+          connectionProblem();
+          isLoading = false;
+          notifyListeners();
+          return;
         }
       }
 
-      currentMessages.add(response);
-      if (response.type == MessageType.bot) {
-        await _saveCurrentSessionToHistory();
-      }
-    } finally {
-      isLoading = false;
-      notifyListeners();
+      final finalResponse = synthesizeResponse(
+        responseData,
+        type: responseType,
+      );
+
+      currentMessages.add(finalResponse);
+
+      currentChatId = await _historyRepository.saveConversation(
+        userId: _userId,
+        query: query,
+        response: finalResponse.text,
+        chatId: currentChatId,
+        title: _buildSessionTitle(),
+        allMessages: currentMessages,
+      );
     }
   }
 
-  bool _isOutOfTopic(String normalizedText) {
+  isLoading = false;
+  notifyListeners();
+}
+
+  bool checkTopic(String query) {
+    final normalizedText = _localDataRepository.normalize(query);
     final outOfTopicWords = [
       "καιρος",
       "πολιτικη",
@@ -141,59 +142,60 @@ class ChatbotController extends ChangeNotifier {
       "μουσικη",
       "ταξιδι",
     ];
-
-    return outOfTopicWords.any(normalizedText.contains);
+    return outOfTopicWords.any(
+      normalizedText.contains,
+    ); // Επιστρέφει true αν είναι εκτός θέματος
   }
 
-  bool _understandingFailed(String normalizedText) {
-    return normalizedText.length < 2;
+  void rejectAndReturnConstraints() {
+    currentMessages.add(
+      ChatMessage(
+        text:
+            "Παρακαλώ περιορίστε τις ερωτήσεις σας σε θέματα διατροφής, ευεξίας και γυμναστικής.",
+        type: MessageType.constraint,
+      ),
+    );
   }
 
-  Future<ChatMessage> _askExternalAi(String query) async {
-    try {
-      final responseText = await _aiApiClient.ask(query).timeout(
-            const Duration(seconds: 10),
-          );
-      return ChatMessage(text: responseText, type: MessageType.bot);
-    } on TimeoutException {
-      return ChatMessage(
-        text: "Υπήρξε καθυστέρηση στην επικοινωνία με την εξωτερική υπηρεσία AI. Δοκίμασε ξανά σε λίγο.",
+  bool checkUnderstanding(String query) {
+    final normalizedText = _localDataRepository.normalize(query);
+    return !_localDataRepository.isGibberish(query) &&
+        normalizedText.length >= 2;
+  }
+
+  void handleUnderstandingError() {
+    currentMessages.add(
+      ChatMessage(
+        text:
+            "Δεν μπόρεσα να καταλάβω το μήνυμά σας. Μπορείτε να το αναδιατυπώσετε;",
+        type: MessageType.rephrase,
+      ),
+    );
+  }
+
+  void cancelProcess() {
+    debugPrint("Διαδικασία AI ακυρώθηκε λόγω σφάλματος/timeout.");
+  }
+
+  void connectionProblem() {
+    currentMessages.add(
+      ChatMessage(
+        text:
+            "Υπήρξε πρόβλημα σύνδεσης με την εξωτερική υπηρεσία AI. Δοκίμασε ξανά σε λίγο.",
         type: MessageType.connectionError,
-      );
-    } catch (e) {
-      debugPrint("Σφάλμα εξωτερικού AI API: $e");
-      return ChatMessage(
-        text: "Υπήρξε πρόβλημα σύνδεσης με την εξωτερική υπηρεσία AI. Η συνομιλία αποθηκεύτηκε και μπορείς να ξαναδοκιμάσεις.",
-        type: MessageType.connectionError,
-      );
-    }
+      ),
+    );
   }
 
-  Future<void> _saveCurrentSessionToHistory() async {
-    final user = _auth.currentUser;
-    if (user == null || currentMessages.isEmpty) return;
-
-    try {
-      final title = _buildSessionTitle();
-      final savedChatId = await _historyRepository.saveConversation(
-        chatId: currentChatId,
-        title: title,
-        messages: currentMessages,
-      );
-
-      currentChatId = savedChatId;
-      final session = ChatSession(savedChatId, title, List.from(currentMessages));
-      final index = history.indexWhere((s) => s.id == savedChatId);
-
-      if (index == -1) {
-        history.insert(0, session);
-      } else {
-        history[index] = session;
-      }
-    } catch (e) {
-      debugPrint("Σφάλμα αποθήκευσης συνομιλίας: $e");
-    }
-  }
+  ChatMessage synthesizeResponse(
+  dynamic data, {
+  MessageType type = MessageType.bot,
+}) {
+  return ChatMessage(
+    text: data.toString(),
+    type: type,
+  );
+}
 
   String _buildSessionTitle() {
     for (final message in currentMessages) {

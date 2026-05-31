@@ -4,6 +4,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 
+import 'smart_insights_service.dart';
+
 class ChatbotDataCache {
   static final ChatbotDataCache _instance = ChatbotDataCache._internal();
   factory ChatbotDataCache() => _instance;
@@ -50,11 +52,15 @@ class ChatbotDataCache {
         nextShoppingList = shoppingListRes.docs.map(_withId).toList();
       }
 
-      final ingRes =
-          await FirebaseFirestore.instance.collection('ingredients').get();
-      final recRes = await FirebaseFirestore.instance.collection('recipes').get();
-      final progRes =
-          await FirebaseFirestore.instance.collection('fitness_programs').get();
+      final ingRes = await FirebaseFirestore.instance
+          .collection('ingredients')
+          .get();
+      final recRes = await FirebaseFirestore.instance
+          .collection('recipes')
+          .get();
+      final progRes = await FirebaseFirestore.instance
+          .collection('fitness_programs')
+          .get();
 
       userProfile = nextUserProfile;
       cookingBook = nextCookingBook;
@@ -88,7 +94,7 @@ class ChatbotDataCache {
 
 class LocalDataRepository {
   LocalDataRepository({ChatbotDataCache? cache})
-      : _cache = cache ?? ChatbotDataCache();
+    : _cache = cache ?? ChatbotDataCache();
 
   final ChatbotDataCache _cache;
   final math.Random _random = math.Random();
@@ -121,11 +127,15 @@ class LocalDataRepository {
     return [];
   }
 
-  String? retrieveInformation(String normalizedText) {
+  Future<String?> retrieveInformation(String normalizedText) async {
+    await _cache.loadData();
     final userAllergies = getUserAllergies();
-    final activeAllergies =
-        _extractActiveAllergies(normalizedText, userAllergies);
+    final activeAllergies = _extractActiveAllergies(
+      normalizedText,
+      userAllergies,
+    );
 
+    // 1. Exact local app data first.
     final profileResponse = _answerUserProfile(normalizedText, userAllergies);
     if (profileResponse != null) return profileResponse;
 
@@ -135,52 +145,109 @@ class LocalDataRepository {
     final shoppingListResponse = _answerShoppingList(normalizedText);
     if (shoppingListResponse != null) return shoppingListResponse;
 
-    final asksIngredientNutrition = _asksForNutrition(normalizedText);
+    final recommendedProgramsResponse = _answerRecommendedFitnessPrograms(
+      normalizedText,
+    );
+    if (recommendedProgramsResponse != null) return recommendedProgramsResponse;
 
-    if (asksIngredientNutrition && !normalizedText.contains("συνταγ")) {
-      final ingredientResponse =
-          _findIngredient(normalizedText, activeAllergies);
+    final dailyMealPlanResponse = _answerDailyMealPlan(
+      normalizedText,
+      activeAllergies,
+    );
+    if (dailyMealPlanResponse != null) return dailyMealPlanResponse;
+
+    // 2. Nutrition calculations for specific ingredients remain local.
+    final asksIngredientNutrition = _asksForNutrition(normalizedText);
+    final looksLikeIngredientAmount =
+        _extractGramAmount(normalizedText) != null;
+
+    if ((asksIngredientNutrition || looksLikeIngredientAmount) &&
+        !normalizedText.contains("συνταγ")) {
+      final ingredientResponse = _findIngredientNutrition(
+        normalizedText,
+        activeAllergies,
+      );
       if (ingredientResponse != null) return ingredientResponse;
     }
 
+    // 3. Collection summaries remain local.
     if (_asksForCollectionSummary(normalizedText)) {
       return _collectionSummary(normalizedText);
     }
 
-    if (_asksForOpenRecipeRecommendation(normalizedText)) {
-      return _recommendRecipe(normalizedText, activeAllergies);
-    }
+    final asksFitness = _asksForFitnessRecommendation(normalizedText);
+    final asksRecipe = _asksForRecipeRecommendation(normalizedText);
+    final asksSpecificLocalFoodData = _asksForSpecificLocalFoodData(
+      normalizedText,
+    );
 
-    final recipeResponse = _findRecipe(normalizedText, activeAllergies);
-    if (recipeResponse != null) return recipeResponse;
-
-    final ingredientResponse = _findIngredient(normalizedText, activeAllergies);
-    if (ingredientResponse != null) return ingredientResponse;
-
-    if (_asksForRecipeRecommendation(normalizedText)) {
-      return _recommendRecipe(normalizedText, activeAllergies);
-    }
-
-    if (_asksForFitnessRecommendation(normalizedText)) {
-      return _recommendFitnessProgram(normalizedText);
-    }
-
-    final programResponse = _findFitnessProgram(normalizedText);
-    if (programResponse != null) return programResponse;
-
-    if (_asksForRecipeRecommendation(normalizedText) ||
-        _asksForFitnessRecommendation(normalizedText)) {
+    // 4. General wellness/nutrition/fitness questions should go to the proxy.
+    // Example: "Γιατί η βιταμίνη C κάνει καλό;" or
+    // "Δώσε μου συμβουλές αποκατάστασης μετά από προπόνηση".
+    // These are not requests for a stored recipe/ingredient/program.
+    if (_shouldUseExternalAiWithoutLocalSearch(
+      normalizedText,
+      asksFitness: asksFitness,
+      asksRecipe: asksRecipe,
+      asksSpecificLocalFoodData: asksSpecificLocalFoodData,
+    )) {
       return null;
     }
 
-    return _bestEffortSearch(normalizedText, activeAllergies);
+    // 5. Fitness questions are checked before recipes so workout/recovery
+    // queries do not accidentally match food records.
+    if (asksFitness && !asksRecipe) {
+      final programResponse = _findFitnessProgram(normalizedText);
+      if (programResponse != null) return programResponse;
+
+      final fitnessRecommendation = _recommendFitnessProgram(normalizedText);
+      if (fitnessRecommendation != null) return fitnessRecommendation;
+
+      return null;
+    }
+
+    // 6. Recipe logic only runs for actual recipe/meal requests.
+    if (asksRecipe) {
+      if (_asksForOpenRecipeRecommendation(normalizedText)) {
+        final recommendation = _recommendRecipe(
+          normalizedText,
+          activeAllergies,
+        );
+        if (recommendation != null) return recommendation;
+      }
+
+      final recipeResponse = _findRecipe(normalizedText, activeAllergies);
+      if (recipeResponse != null) return recipeResponse;
+
+      final recommendation = _recommendRecipe(normalizedText, activeAllergies);
+      if (recommendation != null) return recommendation;
+
+      return null;
+    }
+
+    // 7. Ingredient lookup only runs when the user asks for a specific
+    // food/ingredient, not for broad educational wellness questions.
+    if (asksSpecificLocalFoodData) {
+      final ingredientResponse = _findIngredient(
+        normalizedText,
+        activeAllergies,
+      );
+      if (ingredientResponse != null) return ingredientResponse;
+    }
+
+    if (asksFitness) {
+      final fitnessRecommendation = _recommendFitnessProgram(normalizedText);
+      if (fitnessRecommendation != null) return fitnessRecommendation;
+      return null;
+    }
+
+    return null;
   }
 
   String? _answerUserProfile(String normalizedText, List<String> allergies) {
     final profile = _cache.userProfile;
-    if (profile == null) return null;
-
-    final asksProfile = normalizedText.contains("προφιλ") ||
+    final asksProfile =
+        normalizedText.contains("προφιλ") ||
         normalizedText.contains("στοιχεια μου") ||
         normalizedText.contains("ποιος ειμαι") ||
         normalizedText.contains("στοχοι μου") ||
@@ -193,6 +260,9 @@ class LocalDataRepository {
         normalizedText.contains("υψος");
 
     if (!asksProfile) return null;
+    if (profile == null) {
+      return "Δεν βρήκα αποθηκευμένα στοιχεία προφίλ για τον λογαριασμό σου.";
+    }
 
     final secondaryGoals = _asStringList(profile['secondaryGoals']);
     final healthIssues = _asStringList(profile['healthIssues']);
@@ -247,13 +317,14 @@ class LocalDataRepository {
     final pending = _cache.shoppingList
         .where((item) => item['isChecked'] != true)
         .map((item) {
-      final name = item['name'] ?? '-';
-      final quantity = (item['quantity'] ?? '').toString();
-      final amount = (item['amount'] as num?)?.toInt() ?? 0;
-      if (quantity.isNotEmpty) return "$name ($quantity)";
-      if (amount > 0) return "$name (${amount}g)";
-      return name.toString();
-    }).toList();
+          final name = item['name'] ?? '-';
+          final quantity = (item['quantity'] ?? '').toString();
+          final amount = (item['amount'] as num?)?.toInt() ?? 0;
+          if (quantity.isNotEmpty) return "$name ($quantity)";
+          if (amount > 0) return "$name (${amount}g)";
+          return name.toString();
+        })
+        .toList();
 
     if (pending.isEmpty) {
       return "Έχεις ${_cache.shoppingList.length} προϊόντα στη λίστα αγορών και όλα φαίνονται ολοκληρωμένα.";
@@ -262,31 +333,282 @@ class LocalDataRepository {
     return "Στη λίστα αγορών σου απομένουν: ${pending.take(12).join(', ')}.";
   }
 
+  String? _answerRecommendedFitnessPrograms(String normalizedText) {
+    final asksRecommendedPrograms =
+        normalizedText.contains("προτεινομενα προγραμματα") ||
+        normalizedText.contains("προτεινομενες προπονησεις") ||
+        (normalizedText.contains("προτεινομενα") &&
+            (normalizedText.contains("γυμναστικ") ||
+                normalizedText.contains("προγραμμα") ||
+                normalizedText.contains("προπονηση")));
+
+    if (!asksRecommendedPrograms) return null;
+    if (_cache.programs.isEmpty) {
+      return "Δεν υπάρχουν καταχωρημένα προγράμματα γυμναστικής αυτή τη στιγμή.";
+    }
+
+    final profile = _cache.userProfile;
+    if (profile == null || profile['fitnessPreferences'] is! Map) {
+      return "Δεν βρήκα απαντήσεις από το κουίζ γυμναστικής στο προφίλ σου. Συμπλήρωσε πρώτα το κουίζ για να σου εμφανίσω τα ίδια προτεινόμενα προγράμματα.";
+    }
+
+    final prefs = Map<String, String>.from(profile['fitnessPreferences']);
+    final scoredPrograms = _cache.programs.map((program) {
+      final score = SmartInsightsService.calculateProgramScore(
+        programData: program,
+        userPreferences: prefs,
+        userData: profile,
+      );
+      return MapEntry(program, score);
+    }).toList()..sort((a, b) => b.value.compareTo(a.value));
+
+    var noExactMatch = false;
+    var selected = scoredPrograms.where((entry) => entry.value > 2).toList();
+    if (selected.isEmpty) {
+      noExactMatch = true;
+      selected = scoredPrograms.take(3).toList();
+    } else {
+      selected = selected.take(4).toList();
+    }
+
+    final insights = SmartInsightsService.generateSmartInsights(
+      noExactMatch: noExactMatch,
+      userData: profile,
+    );
+    final programLines = selected
+        .map((entry) {
+          final program = entry.key;
+          return "- ${program['name'] ?? 'Χωρίς τίτλο'}: "
+              "${program['category'] ?? '-'}, ${program['location'] ?? '-'}, "
+              "ένταση ${program['intensity'] ?? program['difficulty'] ?? '-'}, "
+              "διάρκεια ${program['duration'] ?? '-'}, "
+              "~${program['estimatedCalories'] ?? '-'} kcal.";
+        })
+        .join('\n');
+    final insightText = insights.isEmpty
+        ? ""
+        : "\n\nΓιατί ταιριάζουν:\n${insights.take(3).join('\n')}";
+
+    return "Με βάση τις απαντήσεις σου στο κουίζ, σου προτείνω:\n"
+        "$programLines$insightText";
+  }
+
+  String? _answerDailyMealPlan(
+    String normalizedText,
+    List<String> avoidAllergies,
+  ) {
+    final asksDailyPlan =
+        normalizedText.contains("ημερησιο πλανο γευματων") ||
+        normalizedText.contains("πλανο γευματων") ||
+        (normalizedText.contains("πρωινο") &&
+            normalizedText.contains("μεσημεριανο") &&
+            normalizedText.contains("βραδινο"));
+
+    if (!asksDailyPlan) return null;
+
+    final breakfast = _chooseMealPlanRecipe(
+      category: "Πρωινό",
+      calorieShare: 0.25,
+      avoidAllergies: avoidAllergies,
+      selectedIds: <String>{},
+    );
+    final selectedIds = <String>{if (breakfast != null) _recipeId(breakfast)};
+    final lunch = _chooseMealPlanRecipe(
+      category: "Μεσημεριανό",
+      calorieShare: 0.40,
+      avoidAllergies: avoidAllergies,
+      selectedIds: selectedIds,
+    );
+    if (lunch != null) selectedIds.add(_recipeId(lunch));
+    final dinner = _chooseMealPlanRecipe(
+      category: "Βραδινό",
+      calorieShare: 0.35,
+      avoidAllergies: avoidAllergies,
+      selectedIds: selectedIds,
+    );
+
+    final meals = {
+      "Πρωινό": breakfast,
+      "Μεσημεριανό": lunch,
+      "Βραδινό": dinner,
+    };
+
+    if (meals.values.every((recipe) => recipe == null)) {
+      return "Δεν βρήκα αρκετές συνταγές που να ταιριάζουν με τις διατροφικές προτιμήσεις και τους στόχους σου.";
+    }
+
+    final profile = _cache.userProfile;
+    final targetCalories = (profile?['targetCalories'] as num?)?.toDouble();
+    final dietType = profile?['dietType'] ?? 'Όλα (Χωρίς περιορισμούς)';
+    var totalCalories = 0.0;
+    final mealLines = meals.entries
+        .map((entry) {
+          final recipe = entry.value;
+          if (recipe == null) {
+            return "${entry.key}: Δεν βρήκα διαθέσιμη συνταγή για αυτό το γεύμα.";
+          }
+
+          final calories = _toDouble(recipe['caloriesPerServing']);
+          totalCalories += calories;
+          return _formatMealPlanLine(entry.key, recipe);
+        })
+        .join('\n\n');
+    final targetText = targetCalories == null || targetCalories <= 0
+        ? ""
+        : "\n\nΣτόχος ημέρας: ${_formatNumber(targetCalories)} kcal. "
+              "Το πλάνο καλύπτει περίπου ${_formatNumber(totalCalories)} kcal.";
+
+    return "Με βάση το προφίλ σου, τη διατροφή ($dietType) και τους στόχους σου:\n\n"
+        "$mealLines$targetText";
+  }
+
   String? _findRecipe(String normalizedText, List<String> activeAllergies) {
     final specificWords = _recipeSpecificQueryWords(normalizedText);
     final needsSpecificMatch =
         normalizedText.contains("συνταγ") && specificWords.isNotEmpty;
-    final matches = _cache.recipes
-        .where((rec) {
-          if (needsSpecificMatch &&
-              !_recordContainsAnyQueryWord(rec, specificWords)) {
-            return false;
-          }
-          return _recordMatchesQuery(rec, normalizedText, [
-            'title',
-            'categories',
-            'tags',
-            'ingredients',
-            'prepDescription',
-          ]);
-        })
-        .toList();
+    final matches = _cache.recipes.where((rec) {
+      if (needsSpecificMatch &&
+          !_recordContainsAnyQueryWord(rec, specificWords)) {
+        return false;
+      }
+      return _recordMatchesQuery(rec, normalizedText, [
+        'title',
+        'categories',
+        'tags',
+        'ingredients',
+        'prepDescription',
+      ]);
+    }).toList();
 
     if (matches.isEmpty) return null;
 
-    matches.sort((a, b) => _scoreRecipe(b, normalizedText)
-        .compareTo(_scoreRecipe(a, normalizedText)));
+    matches.sort(
+      (a, b) => _scoreRecipe(
+        b,
+        normalizedText,
+      ).compareTo(_scoreRecipe(a, normalizedText)),
+    );
     return _formatRecipe(matches.first, activeAllergies);
+  }
+
+  Map<String, dynamic>? _chooseMealPlanRecipe({
+    required String category,
+    required double calorieShare,
+    required List<String> avoidAllergies,
+    required Set<String> selectedIds,
+  }) {
+    final profile = _cache.userProfile;
+    final candidates = _cache.recipes.where((recipe) {
+      final id = _recipeId(recipe);
+      if (selectedIds.contains(id)) return false;
+      if (!_recipeHasValue(recipe, category)) return false;
+      if (_recipeContainsAny(recipe, avoidAllergies)) return false;
+      return _recipeMatchesDietProfile(recipe, profile);
+    }).toList();
+
+    if (candidates.isEmpty) return null;
+
+    candidates.sort(
+      (a, b) => _mealPlanRecipeScore(
+        b,
+        calorieShare,
+        profile,
+      ).compareTo(_mealPlanRecipeScore(a, calorieShare, profile)),
+    );
+
+    final topCount = math.min(3, candidates.length);
+    return candidates[_random.nextInt(topCount)];
+  }
+
+  int _mealPlanRecipeScore(
+    Map<String, dynamic> recipe,
+    double calorieShare,
+    Map<String, dynamic>? profile,
+  ) {
+    var score = (((recipe['avgRating'] ?? 0) as num).toDouble() * 2).round();
+    final targetCalories = (profile?['targetCalories'] as num?)?.toDouble();
+    final recipeCalories = _toDouble(recipe['caloriesPerServing']);
+
+    if (targetCalories != null && targetCalories > 0 && recipeCalories > 0) {
+      final mealTarget = targetCalories * calorieShare;
+      score += math
+          .max(0, 14 - ((recipeCalories - mealTarget).abs() / 45))
+          .round();
+    }
+
+    final mainGoal = _normalizeValue(profile?['mainGoal'] ?? '');
+    final secondaryGoals = _normalizeValue(profile?['secondaryGoals'] ?? '');
+    final goalText = "$mainGoal $secondaryGoals";
+    final servings = math.max(1, (_toDouble(recipe['servings'])).round());
+    final proteinPerServing =
+        _recipeMacro(recipe, 'totalProtein', 'protein') / servings;
+
+    if (goalText.contains("απωλεια") ||
+        goalText.contains("χασ") ||
+        goalText.contains("λιπο")) {
+      if (recipeCalories > 0 && recipeCalories <= 500) score += 3;
+      if (_recipeHasValue(recipe, "Low Carb")) score += 2;
+    }
+    if (goalText.contains("μυ") ||
+        goalText.contains("ογκο") ||
+        goalText.contains("δυναμ")) {
+      score += math.min(6, (proteinPerServing / 8).round());
+      if (_recipeHasValue(recipe, "High Protein")) score += 3;
+    }
+
+    return score;
+  }
+
+  bool _recipeMatchesDietProfile(
+    Map<String, dynamic> recipe,
+    Map<String, dynamic>? profile,
+  ) {
+    final dietType = _normalizeValue(profile?['dietType'] ?? '');
+    if (dietType.isEmpty || dietType.contains("ολα")) return true;
+    if (dietType.contains("vegan")) return _recipeHasValue(recipe, "Vegan");
+    if (dietType.contains("vegetarian")) {
+      return _recipeHasValue(recipe, "Vegetarian") ||
+          _recipeHasValue(recipe, "Vegan");
+    }
+    if (dietType.contains("keto") || dietType.contains("low carb")) {
+      return _recipeHasValue(recipe, "Low Carb");
+    }
+    if (dietType.contains("pescatarian")) {
+      return !_recipeContainsAnyTerms(recipe, [
+        "κρεας",
+        "κοτοπουλο",
+        "μοσχαρι",
+        "χοιρινο",
+        "κιμα",
+        "γαλοπουλα",
+        "μπεικον",
+      ]);
+    }
+    return true;
+  }
+
+  bool _recipeContainsAnyTerms(
+    Map<String, dynamic> recipe,
+    List<String> terms,
+  ) {
+    final text = _normalizeValue(recipe);
+    return terms.any(
+      (term) => text.contains(_removeAccents(term.toLowerCase())),
+    );
+  }
+
+  String _formatMealPlanLine(String mealName, Map<String, dynamic> recipe) {
+    final servings = math.max(1, (_toDouble(recipe['servings'])).round());
+    final protein = _recipeMacro(recipe, 'totalProtein', 'protein') / servings;
+    final carbs = _recipeMacro(recipe, 'totalCarbs', 'carbs') / servings;
+    final fats = _recipeMacro(recipe, 'totalFats', 'fats') / servings;
+
+    return "$mealName: '${recipe['title'] ?? 'Χωρίς τίτλο'}'\n"
+        "Θερμίδες: ${_formatNumber(_toDouble(recipe['caloriesPerServing']))} kcal ανά μερίδα\n"
+        "Macros: Πρωτεΐνη ${_formatNumber(protein)}g, "
+        "Υδατάνθρακες ${_formatNumber(carbs)}g, "
+        "Λιπαρά ${_formatNumber(fats)}g\n"
+        "Υλικά: ${_formatRecipeIngredients(recipe)}";
   }
 
   String? _findIngredient(String normalizedText, List<String> activeAllergies) {
@@ -301,9 +623,99 @@ class LocalDataRepository {
 
     if (matches.isEmpty) return null;
 
-    matches.sort((a, b) => _scoreIngredient(b, normalizedText)
-        .compareTo(_scoreIngredient(a, normalizedText)));
+    matches.sort(
+      (a, b) => _scoreIngredient(
+        b,
+        normalizedText,
+      ).compareTo(_scoreIngredient(a, normalizedText)),
+    );
     return _formatIngredient(matches.first, normalizedText, activeAllergies);
+  }
+
+  String? _findIngredientNutrition(
+    String normalizedText,
+    List<String> activeAllergies,
+  ) {
+    final matches = _matchingIngredientsByName(normalizedText);
+    if (matches.isEmpty) return null;
+
+    if (matches.length == 1) {
+      return _formatIngredient(matches.first, normalizedText, activeAllergies);
+    }
+
+    return _formatMultipleIngredients(matches, normalizedText, activeAllergies);
+  }
+
+  List<Map<String, dynamic>> _matchingIngredientsByName(String normalizedText) {
+    final matches = _cache.ingredients
+        .where((ing) => _ingredientNameMatches(ing, normalizedText))
+        .toList();
+
+    matches.sort(
+      (a, b) => _scoreIngredient(
+        b,
+        normalizedText,
+      ).compareTo(_scoreIngredient(a, normalizedText)),
+    );
+    return matches;
+  }
+
+  String _formatMultipleIngredients(
+    List<Map<String, dynamic>> ingredients,
+    String normalizedText,
+    List<String> activeAllergies,
+  ) {
+    var totalCalories = 0.0;
+    var totalProtein = 0.0;
+    var totalCarbs = 0.0;
+    var totalFats = 0.0;
+    var hasAllAmounts = true;
+
+    final lines = ingredients
+        .map((ing) {
+          final grams = _extractIngredientGramAmount(ing, normalizedText);
+          final caloriesPer100g = _toDouble(ing['caloriesPer100g']);
+          final proteinPer100g = _toDouble(ing['protein']);
+          final carbsPer100g = _toDouble(ing['carbs']);
+          final fatsPer100g = _toDouble(ing['fats']);
+          final name = ing['name'] ?? '-';
+          final warning = _ingredientMatchesAllergy(ing, activeAllergies)
+              ? " Προσοχή: ταιριάζει με κάτι που θέλεις να αποφύγεις."
+              : "";
+
+          if (grams == null) {
+            hasAllAmounts = false;
+            return "- $name: ${_formatNumber(caloriesPer100g)} kcal ανά 100g, "
+                "Πρωτεΐνη ${_formatNumber(proteinPer100g)}g, "
+                "Υδατάνθρακες ${_formatNumber(carbsPer100g)}g, "
+                "Λιπαρά ${_formatNumber(fatsPer100g)}g.$warning";
+          }
+
+          final calories = caloriesPer100g * grams / 100;
+          final protein = proteinPer100g * grams / 100;
+          final carbs = carbsPer100g * grams / 100;
+          final fats = fatsPer100g * grams / 100;
+          totalCalories += calories;
+          totalProtein += protein;
+          totalCarbs += carbs;
+          totalFats += fats;
+
+          return "- $name (${_formatNumber(grams)}g): "
+              "${_formatNumber(calories)} kcal, "
+              "Πρωτεΐνη ${_formatNumber(protein)}g, "
+              "Υδατάνθρακες ${_formatNumber(carbs)}g, "
+              "Λιπαρά ${_formatNumber(fats)}g.$warning";
+        })
+        .join('\n');
+
+    final totalText = hasAllAmounts
+        ? "\n\nΣύνολο: ${_formatNumber(totalCalories)} kcal, "
+              "Πρωτεΐνη ${_formatNumber(totalProtein)}g, "
+              "Υδατάνθρακες ${_formatNumber(totalCarbs)}g, "
+              "Λιπαρά ${_formatNumber(totalFats)}g."
+        : "\n\nΓια ακριβές σύνολο χρειάζομαι τα γραμμάρια για κάθε υλικό.";
+
+    return "Βρήκα αυτά τα υλικά:\n$lines$totalText";
   }
 
   String _formatIngredient(
@@ -311,11 +723,7 @@ class LocalDataRepository {
     String normalizedText,
     List<String> activeAllergies,
   ) {
-    final name = _normalizeValue(ing['name']);
-    final isAllergic = activeAllergies.any(
-      (allergy) => name.contains(_removeAccents(allergy.toLowerCase())),
-    );
-    final warningText = isAllergic
+    final warningText = _ingredientMatchesAllergy(ing, activeAllergies)
         ? "Προσοχή: αυτό το υλικό ταιριάζει με κάτι που θέλεις να αποφύγεις.\n\n"
         : "";
 
@@ -328,10 +736,10 @@ class LocalDataRepository {
     final amountMacros = grams == null
         ? ""
         : "\n\nΓια ${_formatNumber(grams)}g:\n"
-            "Θερμίδες: ${_formatNumber(caloriesPer100g * grams / 100)} kcal\n"
-            "Πρωτεΐνη: ${_formatNumber(proteinPer100g * grams / 100)}g\n"
-            "Υδατάνθρακες: ${_formatNumber(carbsPer100g * grams / 100)}g\n"
-            "Λιπαρά: ${_formatNumber(fatsPer100g * grams / 100)}g";
+              "Θερμίδες: ${_formatNumber(caloriesPer100g * grams / 100)} kcal\n"
+              "Πρωτεΐνη: ${_formatNumber(proteinPer100g * grams / 100)}g\n"
+              "Υδατάνθρακες: ${_formatNumber(carbsPer100g * grams / 100)}g\n"
+              "Λιπαρά: ${_formatNumber(fatsPer100g * grams / 100)}g";
 
     return "$warningTextΣχετικά με το υλικό '${ing['name']}':\n\n"
         "Ανά 100g:\n"
@@ -344,19 +752,25 @@ class LocalDataRepository {
 
   String? _findFitnessProgram(String normalizedText) {
     final matches = _cache.programs
-        .where((prog) => _recordMatchesQuery(prog, normalizedText, [
-              'name',
-              'description',
-              'category',
-              'location',
-              'intensity',
-              'duration',
-            ]))
+        .where(
+          (prog) => _recordMatchesQuery(prog, normalizedText, [
+            'name',
+            'description',
+            'category',
+            'location',
+            'intensity',
+            'duration',
+          ]),
+        )
         .toList();
 
     if (matches.isEmpty) return null;
-    matches.sort((a, b) => _scoreProgram(b, normalizedText)
-        .compareTo(_scoreProgram(a, normalizedText)));
+    matches.sort(
+      (a, b) => _scoreProgram(
+        b,
+        normalizedText,
+      ).compareTo(_scoreProgram(a, normalizedText)),
+    );
     return _formatProgram(matches.first);
   }
 
@@ -382,13 +796,13 @@ class LocalDataRepository {
     }).toList();
     final quickMatches = quickPreferred
         ? categoryMatches
-            .where((recipe) => _recipeHasValue(recipe, "Γρήγορη"))
-            .toList()
+              .where((recipe) => _recipeHasValue(recipe, "Γρήγορη"))
+              .toList()
         : categoryMatches;
     final safeMatchingRecipes =
         quickPreferred && targetCategory != null && quickMatches.length <= 1
-            ? categoryMatches
-            : quickMatches;
+        ? categoryMatches
+        : quickMatches;
 
     if (safeMatchingRecipes.isEmpty) return null;
 
@@ -469,42 +883,6 @@ class LocalDataRepository {
     return null;
   }
 
-  String? _bestEffortSearch(String normalizedText, List<String> activeAllergies) {
-    final recipeMatches = _cache.recipes
-        .map((r) => MapEntry(r, _scoreRecord(r, normalizedText)))
-        .where((entry) => entry.value > 0)
-        .toList()
-      ..sort((a, b) => b.value.compareTo(a.value));
-    if (recipeMatches.isNotEmpty) {
-      return _formatRecipe(recipeMatches.first.key, activeAllergies);
-    }
-
-    final ingredientMatches = _cache.ingredients
-        .where((i) => _ingredientNameMatches(i, normalizedText))
-        .map((i) => MapEntry(i, _scoreIngredient(i, normalizedText)))
-        .where((entry) => entry.value > 0)
-        .toList()
-      ..sort((a, b) => b.value.compareTo(a.value));
-    if (ingredientMatches.isNotEmpty) {
-      return _formatIngredient(
-        ingredientMatches.first.key,
-        normalizedText,
-        activeAllergies,
-      );
-    }
-
-    final programMatches = _cache.programs
-        .map((p) => MapEntry(p, _scoreRecord(p, normalizedText)))
-        .where((entry) => entry.value > 0)
-        .toList()
-      ..sort((a, b) => b.value.compareTo(a.value));
-    if (programMatches.isNotEmpty) {
-      return _formatProgram(programMatches.first.key);
-    }
-
-    return null;
-  }
-
   List<String> _extractActiveAllergies(
     String normalizedText,
     List<String> userAllergies,
@@ -561,6 +939,67 @@ class LocalDataRepository {
     return activeAllergies;
   }
 
+  bool _shouldUseExternalAiWithoutLocalSearch(
+    String normalizedText, {
+    required bool asksFitness,
+    required bool asksRecipe,
+    required bool asksSpecificLocalFoodData,
+  }) {
+    if (asksRecipe || asksSpecificLocalFoodData) return false;
+
+    final asksGeneralExplanation =
+        normalizedText.contains("γιατι") ||
+        normalizedText.contains("πως ") ||
+        normalizedText.contains("πως να") ||
+        normalizedText.contains("τι ειναι") ||
+        normalizedText.contains("εξηγησε") ||
+        normalizedText.contains("συμβουλη") ||
+        normalizedText.contains("συμβουλες") ||
+        normalizedText.contains("κανει καλο") ||
+        normalizedText.contains("ωφελει") ||
+        normalizedText.contains("βοηθα") ||
+        normalizedText.contains("χρειαζεται") ||
+        normalizedText.contains("πρεπει");
+
+    final mentionsWellnessTopic =
+        asksFitness ||
+        normalizedText.contains("βιταμινη") ||
+        normalizedText.contains("μεταλλο") ||
+        normalizedText.contains("ιχνοστοιχει") ||
+        normalizedText.contains("υπνος") ||
+        normalizedText.contains("αγχος") ||
+        normalizedText.contains("στρες") ||
+        normalizedText.contains("ενεργεια") ||
+        normalizedText.contains("ενυδατωση") ||
+        normalizedText.contains("νερο") ||
+        normalizedText.contains("αποκατασταση") ||
+        normalizedText.contains("αναρρωση") ||
+        normalizedText.contains("ξεκουραση") ||
+        normalizedText.contains("ευεξια");
+
+    return asksGeneralExplanation && mentionsWellnessTopic;
+  }
+
+  bool _asksForSpecificLocalFoodData(String normalizedText) {
+    final asksSpecificNutrition =
+        _asksForNutrition(normalizedText) ||
+        _extractGramAmount(normalizedText) != null ||
+        normalizedText.contains("ποσες θερμιδ") ||
+        normalizedText.contains("ποση πρωτειν") ||
+        normalizedText.contains("ποσους υδατανθρακ") ||
+        normalizedText.contains("ποσα λιπαρ");
+
+    final asksIngredient =
+        normalizedText.contains("υλικο") ||
+        normalizedText.contains("τροφ") ||
+        normalizedText.contains("φαγητο") ||
+        normalizedText.contains("ανα 100") ||
+        normalizedText.contains("γραμμ") ||
+        normalizedText.contains("g ");
+
+    return asksSpecificNutrition || asksIngredient;
+  }
+
   bool _asksForRecipeRecommendation(String normalizedText) {
     return _asksForOpenRecipeRecommendation(normalizedText) ||
         normalizedText.contains("συνταγη");
@@ -591,9 +1030,22 @@ class LocalDataRepository {
 
   bool _asksForFitnessRecommendation(String normalizedText) {
     return normalizedText.contains("ασκηση") ||
+        normalizedText.contains("ασκησεις") ||
         normalizedText.contains("γυμναστικη") ||
         normalizedText.contains("προπονηση") ||
-        normalizedText.contains("προγραμμα");
+        normalizedText.contains("προπονησεις") ||
+        normalizedText.contains("προγραμμα") ||
+        normalizedText.contains("stretching") ||
+        normalizedText.contains("διαταση") ||
+        normalizedText.contains("διατασεις") ||
+        normalizedText.contains("αποκατασταση") ||
+        normalizedText.contains("αναρρωση") ||
+        normalizedText.contains("πιασιμο") ||
+        normalizedText.contains("ποδια") ||
+        normalizedText.contains("μυς") ||
+        normalizedText.contains("μυικο") ||
+        normalizedText.contains("μυικη") ||
+        normalizedText.contains("ξεκουραση");
   }
 
   bool _asksForCollectionSummary(String normalizedText) {
@@ -686,23 +1138,29 @@ class LocalDataRepository {
       return value.any((item) => _valueMatchesQuery(item, normalizedText));
     }
     if (value is Map) {
-      return value.values.any((item) => _valueMatchesQuery(item, normalizedText));
+      return value.values.any(
+        (item) => _valueMatchesQuery(item, normalizedText),
+      );
     }
 
     final normalizedValue = _normalizeValue(value);
     if (normalizedValue.isEmpty) return false;
     if (normalizedText.contains(normalizedValue)) return true;
 
-    final valueWords = _tokenize(normalizedValue)
-        .where((word) => word.length > 3)
-        .toList();
+    final valueWords = _tokenize(
+      normalizedValue,
+    ).where((word) => word.length > 3).toList();
     final queryWords = _queryWords(normalizedText);
 
-    return valueWords.any((valueWord) => queryWords.any((queryWord) =>
-        valueWord == queryWord ||
-        (queryWord.length > 4 && valueWord.contains(queryWord)) ||
-        (valueWord.length > 4 && queryWord.contains(valueWord)) ||
-        _levenshtein(valueWord, queryWord) <= 1));
+    return valueWords.any(
+      (valueWord) => queryWords.any(
+        (queryWord) =>
+            valueWord == queryWord ||
+            (queryWord.length > 4 && valueWord.contains(queryWord)) ||
+            (valueWord.length > 4 && queryWord.contains(valueWord)) ||
+            _levenshtein(valueWord, queryWord) <= 1,
+      ),
+    );
   }
 
   bool _ingredientNameMatches(
@@ -712,10 +1170,7 @@ class LocalDataRepository {
     return _scoreIngredient(ingredient, normalizedText) > 0;
   }
 
-  int _scoreIngredient(
-    Map<String, dynamic> ingredient,
-    String normalizedText,
-  ) {
+  int _scoreIngredient(Map<String, dynamic> ingredient, String normalizedText) {
     final name = _normalizeValue(ingredient['name']);
     if (name.isEmpty) return 0;
     if (normalizedText.contains(name)) return 100;
@@ -725,11 +1180,13 @@ class LocalDataRepository {
     if (nameWords.isEmpty || queryWords.isEmpty) return 0;
 
     final matchedNameWords = nameWords.where((nameWord) {
-      return queryWords.any((queryWord) =>
-          nameWord == queryWord ||
-          (queryWord.length > 4 && nameWord.contains(queryWord)) ||
-          (nameWord.length > 4 && queryWord.contains(nameWord)) ||
-          _levenshtein(nameWord, queryWord) <= 1);
+      return queryWords.any(
+        (queryWord) =>
+            nameWord == queryWord ||
+            (queryWord.length > 4 && nameWord.contains(queryWord)) ||
+            (nameWord.length > 4 && queryWord.contains(nameWord)) ||
+            _levenshtein(nameWord, queryWord) <= 1,
+      );
     }).length;
 
     if (matchedNameWords == nameWords.length) return 70;
@@ -751,9 +1208,9 @@ class LocalDataRepository {
 
   int _scoreRecord(Map<String, dynamic> record, String normalizedText) {
     final text = _normalizeValue(record);
-    return _queryWords(normalizedText)
-        .where((word) => word.length > 3 && text.contains(word))
-        .length;
+    return _queryWords(
+      normalizedText,
+    ).where((word) => word.length > 3 && text.contains(word)).length;
   }
 
   int _scoreTextMatch(dynamic value, String normalizedText) {
@@ -761,7 +1218,11 @@ class LocalDataRepository {
     if (text.isEmpty) return 0;
     if (normalizedText.contains(text)) return 10;
     return _queryWords(normalizedText)
-        .where((word) => text.contains(word) || _tokenize(text).any((part) => _levenshtein(part, word) <= 1))
+        .where(
+          (word) =>
+              text.contains(word) ||
+              _tokenize(text).any((part) => _levenshtein(part, word) <= 1),
+        )
         .length;
   }
 
@@ -772,8 +1233,9 @@ class LocalDataRepository {
     final recipeCalories = (recipe['caloriesPerServing'] as num?)?.toDouble();
     if (targetCalories != null && recipeCalories != null) {
       final mealTarget = targetCalories / 4;
-      score +=
-          math.max(0, 10 - ((recipeCalories - mealTarget).abs() / 80)).round();
+      score += math
+          .max(0, 10 - ((recipeCalories - mealTarget).abs() / 80))
+          .round();
     }
     return score;
   }
@@ -782,11 +1244,16 @@ class LocalDataRepository {
     List<Map<String, dynamic>> recipes,
     String normalizedText,
   ) {
-    final scoredRecipes = recipes
-        .map((recipe) =>
-            MapEntry(recipe, _recommendationScore(recipe, normalizedText)))
-        .toList()
-      ..sort((a, b) => b.value.compareTo(a.value));
+    final scoredRecipes =
+        recipes
+            .map(
+              (recipe) => MapEntry(
+                recipe,
+                _recommendationScore(recipe, normalizedText),
+              ),
+            )
+            .toList()
+          ..sort((a, b) => b.value.compareTo(a.value));
 
     final bestScore = scoredRecipes.first.value;
     final openRecommendation = _asksForOpenRecipeRecommendation(normalizedText);
@@ -798,8 +1265,10 @@ class LocalDataRepository {
 
     if (candidates.length > 1) {
       candidates = candidates
-          .where((recipe) =>
-              !_recentRecipeRecommendationIds.contains(_recipeId(recipe)))
+          .where(
+            (recipe) =>
+                !_recentRecipeRecommendationIds.contains(_recipeId(recipe)),
+          )
           .toList();
       if (candidates.isEmpty) {
         _recentRecipeRecommendationIds.clear();
@@ -836,22 +1305,25 @@ class LocalDataRepository {
     Map<String, dynamic> prefs,
     String normalizedText,
   ) {
-    final scoredPrograms = programs
-        .map((program) => MapEntry(
-              program,
-              _programPreferenceScore(program, prefs, normalizedText),
-            ))
-        .toList()
-      ..sort((a, b) => b.value.compareTo(a.value));
+    final scoredPrograms =
+        programs
+            .map(
+              (program) => MapEntry(
+                program,
+                _programPreferenceScore(program, prefs, normalizedText),
+              ),
+            )
+            .toList()
+          ..sort((a, b) => b.value.compareTo(a.value));
 
-    var candidates = scoredPrograms
-        .map((entry) => entry.key)
-        .toList();
+    var candidates = scoredPrograms.map((entry) => entry.key).toList();
 
     if (candidates.length > 1) {
       candidates = candidates
-          .where((program) =>
-              !_recentProgramRecommendationIds.contains(_programId(program)))
+          .where(
+            (program) =>
+                !_recentProgramRecommendationIds.contains(_programId(program)),
+          )
           .toList();
       if (candidates.isEmpty) {
         _recentProgramRecommendationIds.clear();
@@ -934,33 +1406,44 @@ class LocalDataRepository {
 
   List<String> _recipeIngredientCategories(Map<String, dynamic> recipe) {
     final recipeIngredientNames = _asList(recipe['ingredients'])
-        .map((ing) => ing is Map ? _normalizeValue(ing['name']) : _normalizeValue(ing))
+        .map(
+          (ing) =>
+              ing is Map ? _normalizeValue(ing['name']) : _normalizeValue(ing),
+        )
         .where((name) => name.isNotEmpty)
         .toList();
 
     return _cache.ingredients
-        .where((ing) => recipeIngredientNames.any(
-              (name) => _normalizeValue(ing['name']) == name,
-            ))
+        .where(
+          (ing) => recipeIngredientNames.any(
+            (name) => _normalizeValue(ing['name']) == name,
+          ),
+        )
         .map((ing) => _normalizeValue(ing['category']))
         .where((category) => category.isNotEmpty)
         .toList();
   }
 
   String _formatRecipeIngredients(Map<String, dynamic> recipe) {
-    return _asList(recipe['ingredients']).map((ing) {
-      if (ing is Map) {
-        final name = ing['name'] ?? '-';
-        final amount = ing['amount'];
-        return amount == null || amount == 0 ? name.toString() : "$name (${amount}g)";
-      }
-      return ing.toString();
-    }).join(', ');
+    return _asList(recipe['ingredients'])
+        .map((ing) {
+          if (ing is Map) {
+            final name = ing['name'] ?? '-';
+            final amount = ing['amount'];
+            return amount == null || amount == 0
+                ? name.toString()
+                : "$name (${amount}g)";
+          }
+          return ing.toString();
+        })
+        .join(', ');
   }
 
   List<String> _recipeCategories(Map<String, dynamic> recipe) {
     final categories = <String>[];
-    if (recipe['category'] != null) categories.add(recipe['category'].toString());
+    if (recipe['category'] != null) {
+      categories.add(recipe['category'].toString());
+    }
     categories.addAll(_asStringList(recipe['categories']));
     return categories.toSet().toList();
   }
@@ -1005,11 +1488,51 @@ class LocalDataRepository {
     return null;
   }
 
+  bool _ingredientMatchesAllergy(
+    Map<String, dynamic> ingredient,
+    List<String> activeAllergies,
+  ) {
+    final name = _normalizeValue(ingredient['name']);
+    return activeAllergies.any(
+      (allergy) => name.contains(_removeAccents(allergy.toLowerCase())),
+    );
+  }
+
   double? _extractGramAmount(String normalizedText) {
-    final match = RegExp(r'(\d+(?:[.,]\d+)?)\s*(?:g|gr|γραμ|γραμμα|γραμμαρια)')
-        .firstMatch(normalizedText);
+    final match = RegExp(
+      r'(\d+(?:[.,]\d+)?)\s*(?:g|gr|γραμ|γραμμα|γραμμαρια)',
+    ).firstMatch(normalizedText);
     if (match == null) return null;
     return double.tryParse(match.group(1)!.replaceAll(',', '.'));
+  }
+
+  double? _extractIngredientGramAmount(
+    Map<String, dynamic> ingredient,
+    String normalizedText,
+  ) {
+    final ingredientWords = _tokenize(
+      _normalizeValue(ingredient['name']),
+    ).where((word) => word.length > 2).map(RegExp.escape).toList();
+    if (ingredientWords.isEmpty) return null;
+
+    final amountPattern = r'(\d+(?:[.,]\d+)?)\s*(?:g|gr|γραμ|γραμμα|γραμμαρια)';
+    for (final word in ingredientWords) {
+      final beforeIngredient = RegExp(
+        '$amountPattern(?:\\s+\\S+){0,1}\\s+$word',
+      ).firstMatch(normalizedText);
+      if (beforeIngredient != null) {
+        return double.tryParse(beforeIngredient.group(1)!.replaceAll(',', '.'));
+      }
+
+      final afterIngredient = RegExp(
+        '$word(?:\\s+\\S+){0,1}\\s+$amountPattern',
+      ).firstMatch(normalizedText);
+      if (afterIngredient != null) {
+        return double.tryParse(afterIngredient.group(1)!.replaceAll(',', '.'));
+      }
+    }
+
+    return null;
   }
 
   double _recipeMacro(
@@ -1105,15 +1628,16 @@ class LocalDataRepository {
   List<String> _asStringList(dynamic value) =>
       value is List ? value.map((item) => item.toString()).toList() : [];
 
-  List<String> _recipeSpecificQueryWords(String normalizedText) =>
-      _queryWords(normalizedText)
-          .where((word) => !_genericRecipeQueryWords.contains(word))
-          .toList();
+  List<String> _recipeSpecificQueryWords(String normalizedText) => _queryWords(
+    normalizedText,
+  ).where((word) => !_genericRecipeQueryWords.contains(word)).toList();
 
   List<String> _fitnessSpecificQueryWords(String normalizedText) =>
-      _expandFitnessTerms(_queryWords(normalizedText)
-          .where((word) => !_genericFitnessQueryWords.contains(word))
-          .toList());
+      _expandFitnessTerms(
+        _queryWords(
+          normalizedText,
+        ).where((word) => !_genericFitnessQueryWords.contains(word)).toList(),
+      );
 
   List<String> _queryWords(String normalizedText) => _tokenize(normalizedText)
       .where((word) => word.length > 2 && !_ignoredQueryWords.contains(word))
