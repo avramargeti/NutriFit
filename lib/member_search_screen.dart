@@ -39,9 +39,8 @@ class _MemberSearchScreenState extends State<MemberSearchScreen> {
   ];
 
   Future<void> _searchMembers() async {
-
-    final scaffoldMessenger = ScaffoldMessenger.of(context);
-
+    final scaffoldMessenger = ScaffoldMessenger.of(context); 
+    
     setState(() {
       _isLoading = true;
       _hasSearched = true;
@@ -50,25 +49,31 @@ class _MemberSearchScreenState extends State<MemberSearchScreen> {
 
     try {
       Query query = FirebaseFirestore.instance.collection('users');
-
       String searchText = _searchController.text.trim().toLowerCase();
       
-      if (searchText.isNotEmpty) {
-        query = query.where('username', isEqualTo: searchText);
-      } 
-      else {
+      if (searchText.isEmpty) {
         if (_selectedGoal != null && _selectedGoal != 'Όλα τα μέλη') {
           query = query.where('mainGoal', isEqualTo: _selectedGoal);
         }
-        if (_selectedDietType != null && _selectedDietType != 'Όλα (Χωρίς περιορισμούς)') {
+        if (_selectedDietType != null && _selectedDietType != 'Όλοι οι τύποι') {
           query = query.where('dietType', isEqualTo: _selectedDietType);
         }
       }
 
       QuerySnapshot querySnapshot = await query.get();
+      List<DocumentSnapshot> filteredDocs = querySnapshot.docs;
+
+      if (searchText.isNotEmpty) {
+        filteredDocs = filteredDocs.where((doc) {
+          var userData = doc.data() as Map<String, dynamic>;
+          String dbUsername = (userData['username'] ?? '').toString().toLowerCase();
+          
+          return dbUsername.contains(searchText);
+        }).toList();
+      }
       
       setState(() {
-        _searchResults = querySnapshot.docs.where((doc) => doc.id != currentUser?.uid).toList();
+        _searchResults = filteredDocs.where((doc) => doc.id != currentUser?.uid).toList();
       });
     } catch (e) {
       if (mounted) {
