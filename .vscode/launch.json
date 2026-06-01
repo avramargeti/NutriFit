@@ -1,0 +1,16 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "NutriFit",
+      "request": "launch",
+      "type": "dart"
+    },
+    {
+      "name": "NutriFit Web - Local API",
+      "request": "launch",
+      "type": "dart",
+      "deviceId": "chrome"
+    }
+  ]
+}

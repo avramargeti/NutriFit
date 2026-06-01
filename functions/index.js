@@ -8,11 +8,11 @@ const SYSTEM_INSTRUCTIONS = `
 Απάντησε πάντα στα ελληνικά.
 
 Κανόνες:
-- Μείνε μόνο σε θέματα διατροφής, ευεξίας, fitness, προπόνησης
-  και υγιεινών συνηθειών.
+- Μείνε μόνο σε θέματα διατροφής, ευεξίας, fitness,
+  προπόνησης και υγιεινών συνηθειών.
 - Δώσε πρακτική, σύντομη και ασφαλή απάντηση.
-- Αν η ερώτηση ζητά συνταγή, δώσε υλικά, σύντομα βήματα και
-  ενδεικτικές θερμίδες/macros όπου γίνεται.
+- Αν η ερώτηση ζητά συνταγή, δώσε υλικά, σύντομα βήματα
+  και ενδεικτικές θερμίδες/macros όπου γίνεται.
 - Αν η ερώτηση ζητά άσκηση, δώσε ασκήσεις, σετ, επαναλήψεις,
   ξεκούραση και βασική τεχνική.
 - Μην κάνεις ιατρική διάγνωση.
@@ -36,7 +36,8 @@ exports.askNutriFitAi = onRequest(
           });
         }
 
-        const query = req.body && typeof req.body.query === "string" ?
+        const query =
+        req.body && typeof req.body.query === "string" ?
           req.body.query.trim() :
           "";
 
@@ -50,6 +51,7 @@ exports.askNutriFitAi = onRequest(
         }
 
         const apiKey = process.env.GEMINI_API_KEY;
+
         if (!apiKey) {
           logger.error("GEMINI_API_KEY is missing.");
           return res.status(500).json({
@@ -60,8 +62,9 @@ exports.askNutriFitAi = onRequest(
         }
 
         const model = process.env.GEMINI_MODEL || DEFAULT_GEMINI_MODEL;
+
         const url =
-          `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
+        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
 
         const geminiResponse = await fetch(url, {
           method: "POST",
@@ -71,12 +74,20 @@ exports.askNutriFitAi = onRequest(
           },
           body: JSON.stringify({
             systemInstruction: {
-              parts: [{text: SYSTEM_INSTRUCTIONS}],
+              parts: [
+                {
+                  text: SYSTEM_INSTRUCTIONS,
+                },
+              ],
             },
             contents: [
               {
                 role: "user",
-                parts: [{text: query}],
+                parts: [
+                  {
+                    text: query,
+                  },
+                ],
               },
             ],
             generationConfig: {
@@ -90,16 +101,19 @@ exports.askNutriFitAi = onRequest(
 
         if (!geminiResponse.ok) {
           const providerError = parseProviderError(responseText);
+
           logger.error("Gemini API error", {
             status: geminiResponse.status,
             code: providerError.code,
             statusText: providerError.status,
             message: providerError.message,
           });
+
           return sendGeminiError(res, geminiResponse.status, providerError);
         }
 
         let data;
+
         try {
           data = JSON.parse(responseText);
         } catch (error) {
@@ -112,6 +126,7 @@ exports.askNutriFitAi = onRequest(
         }
 
         const answer = extractGeminiText(data);
+
         if (!answer) {
           logger.error("Empty Gemini answer", data);
           return res.status(502).json({
@@ -128,6 +143,7 @@ exports.askNutriFitAi = onRequest(
         });
       } catch (error) {
         logger.error("askNutriFitAi failed", error);
+
         return res.status(500).json({
           error: "Υπήρξε πρόβλημα σύνδεσης με την εξωτερική υπηρεσία AI.",
           errorCode: "proxy_connection_error",
@@ -137,11 +153,17 @@ exports.askNutriFitAi = onRequest(
     },
 );
 
+/**
+ * Extracts all text parts from a Gemini generateContent response.
+ * @param {object} data Parsed Gemini response payload.
+ * @return {?string} Combined answer text, or null when empty.
+ */
 function extractGeminiText(data) {
   if (!data || typeof data !== "object") return null;
   if (!Array.isArray(data.candidates)) return null;
 
   const parts = [];
+
   for (const candidate of data.candidates) {
     const content = candidate && candidate.content;
     if (!content || !Array.isArray(content.parts)) continue;
@@ -156,6 +178,11 @@ function extractGeminiText(data) {
   return parts.length > 0 ? parts.join("\n\n") : null;
 }
 
+/**
+ * Reads the Gemini error payload without leaking provider details to clients.
+ * @param {string} responseText Raw Gemini response body.
+ * @return {{code: ?string, status: ?string, message: ?string}} Error details.
+ */
 function parseProviderError(responseText) {
   try {
     const parsed = JSON.parse(responseText);
@@ -181,6 +208,13 @@ function parseProviderError(responseText) {
   }
 }
 
+/**
+ * Converts Gemini provider failures to stable client-facing error codes.
+ * @param {object} res Express response object.
+ * @param {number} providerStatus HTTP status returned by Gemini.
+ * @param {object} providerError Parsed provider error details.
+ * @return {object} Express JSON response.
+ */
 function sendGeminiError(res, providerStatus, providerError) {
   const errorCode = normalizeGeminiErrorCode(providerError);
 
@@ -190,6 +224,7 @@ function sendGeminiError(res, providerStatus, providerError) {
   if (errorCode === "invalid_request") clientStatus = 400;
 
   let error = "Η εξωτερική υπηρεσία AI δεν μπόρεσε να επιστρέψει απάντηση.";
+
   if (errorCode === "invalid_api_key") {
     error = "Το Gemini API key δεν είναι έγκυρο ή δεν έχει δικαίωμα πρόσβασης.";
   } else if (errorCode === "resource_exhausted") {
@@ -210,6 +245,11 @@ function sendGeminiError(res, providerStatus, providerError) {
   });
 }
 
+/**
+ * Normalizes Gemini status strings into app-level error codes.
+ * @param {object} providerError Parsed provider error details.
+ * @return {string} Stable error code for the Flutter client.
+ */
 function normalizeGeminiErrorCode(providerError) {
   const raw = providerError.status || providerError.code || "provider_error";
 

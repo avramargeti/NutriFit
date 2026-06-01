@@ -1,0 +1,56 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return signedIn() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return signedIn() && request.auth.token.email in [
+        'avramargeti@gmail.com',
+        'bokosdimitris@gmail.com',
+        'adonopoulouifigeneia@icloud.com'
+      ];
+    }
+
+    match /users/{userId} {
+      allow read, create, update, delete: if isOwner(userId);
+
+      match /chatbot_history/{chatId} {
+        allow read, create, update, delete: if isOwner(userId);
+      }
+
+      match /cookingBook/{recipeId} {
+        allow read, create, update, delete: if isOwner(userId);
+      }
+
+      match /shoppingList/{itemId} {
+        allow read, create, update, delete: if isOwner(userId);
+      }
+    }
+
+    match /ingredients/{ingredientId} {
+      allow read: if signedIn();
+      allow create, update, delete: if isAdmin();
+    }
+
+    match /recipes/{recipeId} {
+      allow read: if signedIn();
+      allow create: if signedIn() && request.resource.data.userId == request.auth.uid;
+      allow update, delete: if isAdmin() ||
+        (signedIn() && resource.data.userId == request.auth.uid);
+    }
+
+    match /fitness_programs/{programId} {
+      allow read: if signedIn();
+      allow create: if signedIn() && request.resource.data.createdBy == request.auth.uid;
+      allow update, delete: if isAdmin() ||
+        (signedIn() && resource.data.createdBy == request.auth.uid);
+    }
+  }
+}
