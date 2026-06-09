@@ -99,18 +99,17 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
 
   // Συνάρτηση ελέγχου username
   Future<void> _checkUsernameAvailability(String val) async {
-    final username = _normalizeUsername(val);
-    if (username.isEmpty) {
+    if (val.trim().isEmpty) {
       setState(() { usernameError = null; suggestedUsernames = []; });
       return;
     }
 
     final result = await FirebaseFirestore.instance
-        .collection('usernames')
-        .doc(username)
+        .collection('users')
+        .where('username', isEqualTo: val.trim())
         .get();
 
-    if (result.exists) {
+    if (result.docs.isNotEmpty) {
       setState(() {
         usernameError = 'Το username χρησιμοποιείται ήδη.';
         suggestedUsernames = [
@@ -131,9 +130,20 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
       return;
     }
 
-    setState(() {
-      emailError = val.contains('@') ? null : 'Η μορφή του Email δεν είναι έγκυρη.';
-    });
+    final result = await FirebaseFirestore.instance
+        .collection('users')
+        .where('email', isEqualTo: val.trim())
+        .get();
+
+    if (result.docs.isNotEmpty) {
+      setState(() {
+        emailError = 'Το email χρησιμοποιείται ήδη από άλλον λογαριασμό.';
+      });
+    } else {
+      setState(() {
+        emailError = null;
+      });
+    }
   }
 
   // Συνάρτηση ελέγχου κωδικού
@@ -238,20 +248,17 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
 
   Future<void> _registerOrUpdateUser() async {
     setState(() => isLoading = true);
-    var createdAuthUser = false;
     try {
       final auth = FirebaseAuth.instance;
       String uid;
       if (auth.currentUser == null) {
         UserCredential userCredential = await auth.createUserWithEmailAndPassword(email: emailController.text.trim(), password: passwordController.text.trim());
         uid = userCredential.user!.uid;
-        createdAuthUser = true;
       } else {
         uid = auth.currentUser!.uid;
       }
 
-      final username = _normalizeUsername(usernameController.text);
-      final userData = {
+      await FirebaseFirestore.instance.collection('users').doc(uid).set({
         'fullName': fullNameController.text.trim(),
         'username': usernameController.text.trim(),
         'email': emailController.text.trim(),
@@ -267,31 +274,7 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
         'allergies': selectedAllergies,
         'healthIssues': selectedHealthIssues, 
         'hasSetGoals': false, 
-      };
-
-      final firestore = FirebaseFirestore.instance;
-      final usernameRef = firestore.collection('usernames').doc(username);
-      final userRef = firestore.collection('users').doc(uid);
-
-      await firestore.runTransaction((transaction) async {
-        final usernameDoc = await transaction.get(usernameRef);
-        final usernameOwner = usernameDoc.data()?['uid'];
-        if (usernameDoc.exists && usernameOwner != uid) {
-          throw FirebaseException(
-            plugin: 'cloud_firestore',
-            code: 'username-already-in-use',
-            message: 'Το username χρησιμοποιείται ήδη.',
-          );
-        }
-
-        transaction.set(usernameRef, {
-          'uid': uid,
-          'email': emailController.text.trim(),
-          'username': username,
-          'createdAt': FieldValue.serverTimestamp(),
-        }, SetOptions(merge: true));
-        transaction.set(userRef, userData, SetOptions(merge: true));
-      });
+      }, SetOptions(merge: true));
 
       if (mounted) Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const GoalsScreen()));
       
@@ -311,29 +294,11 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
       } else {
         _showError('Σφάλμα σύνδεσης: ${e.message}');
       }
-    } on FirebaseException catch (e) {
-      if (e.code == 'username-already-in-use') {
-        if (createdAuthUser) {
-          await FirebaseAuth.instance.currentUser?.delete();
-        }
-        setState(() => _currentStep = 0);
-        usernameFocus.requestFocus();
-        _showError('Το username χρησιμοποιείται ήδη.');
-      } else {
-        if (createdAuthUser) {
-          await FirebaseAuth.instance.currentUser?.delete();
-        }
-        _showError('Σφάλμα Firebase: ${e.message ?? e.code}');
-      }
     } catch (e) {
       _showError('Γενικό Σφάλμα: $e');
     } finally {
       if (mounted) setState(() => isLoading = false);
     }
-  }
-
-  String _normalizeUsername(String value) {
-    return value.trim().toLowerCase();
   }
 
   String get _waterText {

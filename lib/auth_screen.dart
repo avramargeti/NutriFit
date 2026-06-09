@@ -34,19 +34,16 @@ class _AuthScreenState extends State<AuthScreen> {
 
       // Αν δεν έχει @, ψάχνουμε το email μέσω του username στο Firestore
       if (!input.contains('@')) {
-        var usernameDoc = await FirebaseFirestore.instance
-            .collection('usernames')
-            .doc(input.toLowerCase())
+        var querySnapshot = await FirebaseFirestore.instance
+            .collection('users')
+            .where('username', isEqualTo: input)
+            .limit(1)
             .get();
 
-        if (!usernameDoc.exists) {
+        if (querySnapshot.docs.isEmpty) {
           throw 'Δεν βρέθηκε χρήστης με αυτό το Username.';
         }
-        final mappedEmail = usernameDoc.data()?['email']?.toString();
-        if (mappedEmail == null || mappedEmail.isEmpty) {
-          throw 'Δεν βρέθηκε email για αυτό το Username.';
-        }
-        loginEmail = mappedEmail;
+        loginEmail = querySnapshot.docs.first['email'];
       }
 
       // Σύνδεση στο Firebase
