@@ -16,8 +16,6 @@ import 'cycle_screen.dart';
 import 'achievements_screen.dart';
 import 'community_feed_screen.dart';
 import 'calendar_screen.dart';
-import 'chatbot_screen.dart';
-
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -54,7 +52,7 @@ class _HomeScreenState extends State<HomeScreen> {
             if (doc.exists && doc.data() != null) {
               var data = doc.data() as Map<String, dynamic>;
               username = data['username'] ?? "User";
-              userGender = data['gender']; 
+              userGender = data['gender'];
               username =
                   (doc.data() as Map<String, dynamic>)['username'] ?? "User";
             }
@@ -181,7 +179,9 @@ class _HomeScreenState extends State<HomeScreen> {
               onPressed: () {
                 Navigator.push(
                   context,
-                  MaterialPageRoute(builder: (context) => const AchievementsScreen()),
+                  MaterialPageRoute(
+                    builder: (context) => const AchievementsScreen(),
+                  ),
                 );
               },
             ),
@@ -190,7 +190,9 @@ class _HomeScreenState extends State<HomeScreen> {
               onPressed: () {
                 Navigator.push(
                   context,
-                  MaterialPageRoute(builder: (context) => const CommunityFeedScreen()),
+                  MaterialPageRoute(
+                    builder: (context) => const CommunityFeedScreen(),
+                  ),
                 );
               },
             ),
@@ -203,7 +205,9 @@ class _HomeScreenState extends State<HomeScreen> {
             onPressed: () {
               Navigator.push(
                 context,
-                MaterialPageRoute(builder: (context) => const SuperMarketListScreen()),
+                MaterialPageRoute(
+                  builder: (context) => const SuperMarketListScreen(),
+                ),
               );
             },
           ),
@@ -309,7 +313,7 @@ class _HomeScreenState extends State<HomeScreen> {
               onTap: () => _showRecipesModal(context),
             ),
             const SizedBox(height: 20),
-            
+
             _buildDashboardButton(
               context,
               title: 'FITNESS',
@@ -334,9 +338,11 @@ class _HomeScreenState extends State<HomeScreen> {
                 onTap: () {
                   Navigator.push(
                     context,
-                    MaterialPageRoute(builder: (context) => const CycleScreen()),
+                    MaterialPageRoute(
+                      builder: (context) => const CycleScreen(),
+                    ),
                   );
-                }
+                },
               ),
             ],
 
@@ -414,7 +420,10 @@ class _HomeScreenState extends State<HomeScreen> {
                   Navigator.push(
                     context,
                     MaterialPageRoute(
-                      builder: (context) => const FitnessProgramsScreen(viewAll: true, isAdmin: true),
+                      builder: (context) => const FitnessProgramsScreen(
+                        viewAll: true,
+                        isAdmin: true,
+                      ),
                     ),
                   );
                 },

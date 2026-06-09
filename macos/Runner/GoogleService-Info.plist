@@ -3,17 +3,17 @@
 <plist version="1.0">
 <dict>
 	<key>API_KEY</key>
-	<string>AIzaSyCUxhgZMHT6pFNoAaXDAutxkmzJbJUK7Vo</string>
+	<string>AIzaSyBY12d9MwDvgZDglZNyufg-3chTVQ3wLXM</string>
 	<key>GCM_SENDER_ID</key>
-	<string>318038496829</string>
+	<string>1079574665614</string>
 	<key>PLIST_VERSION</key>
 	<string>1</string>
 	<key>BUNDLE_ID</key>
 	<string>com.example.nutrifit</string>
 	<key>PROJECT_ID</key>
-	<string>nutrifit-project-2026</string>
+	<string>nutrifit-database</string>
 	<key>STORAGE_BUCKET</key>
-	<string>nutrifit-project-2026.firebasestorage.app</string>
+	<string>nutrifit-database.firebasestorage.app</string>
 	<key>IS_ADS_ENABLED</key>
 	<false></false>
 	<key>IS_ANALYTICS_ENABLED</key>
@@ -25,6 +25,6 @@
 	<key>IS_SIGNIN_ENABLED</key>
 	<true></true>
 	<key>GOOGLE_APP_ID</key>
-	<string>1:318038496829:ios:5e6041f0f1825bbcc03c54</string>
+	<string>1:1079574665614:ios:244d207bc025c1cdc7acdf</string>
 </dict>
 </plist>

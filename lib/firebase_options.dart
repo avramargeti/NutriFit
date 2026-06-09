@@ -21,10 +21,7 @@ class DefaultFirebaseOptions {
     }
     switch (defaultTargetPlatform) {
       case TargetPlatform.android:
-        throw UnsupportedError(
-          'DefaultFirebaseOptions have not been configured for android - '
-          'you can reconfigure this by running the FlutterFire CLI again.',
-        );
+        return android;
       case TargetPlatform.iOS:
         return ios;
       case TargetPlatform.macOS:
@@ -44,40 +41,46 @@ class DefaultFirebaseOptions {
   }
 
   static const FirebaseOptions web = FirebaseOptions(
-    apiKey: 'AIzaSyDcSMWkEyMn27dpUejeFlaZeibqWhzrRPo',
-    appId: '1:318038496829:web:d36f8af3b9a0b6bbc03c54',
-    messagingSenderId: '318038496829',
-    projectId: 'nutrifit-project-2026',
-    authDomain: 'nutrifit-project-2026.firebaseapp.com',
-    storageBucket: 'nutrifit-project-2026.firebasestorage.app',
-    measurementId: 'G-WBEBV9E0J7',
+    apiKey: 'AIzaSyBKaE2NuvH8Xsn8AOgO7_fkw6eUI8neUyQ',
+    appId: '1:1079574665614:web:0803b8d9bca13e23c7acdf',
+    messagingSenderId: '1079574665614',
+    projectId: 'nutrifit-database',
+    authDomain: 'nutrifit-database.firebaseapp.com',
+    storageBucket: 'nutrifit-database.firebasestorage.app',
+    measurementId: 'G-KZVW7LREW0',
   );
 
   static const FirebaseOptions ios = FirebaseOptions(
-    apiKey: 'AIzaSyCUxhgZMHT6pFNoAaXDAutxkmzJbJUK7Vo',
-    appId: '1:318038496829:ios:5e6041f0f1825bbcc03c54',
-    messagingSenderId: '318038496829',
-    projectId: 'nutrifit-project-2026',
-    storageBucket: 'nutrifit-project-2026.firebasestorage.app',
+    apiKey: 'AIzaSyBY12d9MwDvgZDglZNyufg-3chTVQ3wLXM',
+    appId: '1:1079574665614:ios:244d207bc025c1cdc7acdf',
+    messagingSenderId: '1079574665614',
+    projectId: 'nutrifit-database',
+    storageBucket: 'nutrifit-database.firebasestorage.app',
     iosBundleId: 'com.example.nutrifit',
   );
-
   static const FirebaseOptions macos = FirebaseOptions(
-    apiKey: 'AIzaSyCUxhgZMHT6pFNoAaXDAutxkmzJbJUK7Vo',
-    appId: '1:318038496829:ios:5e6041f0f1825bbcc03c54',
-    messagingSenderId: '318038496829',
-    projectId: 'nutrifit-project-2026',
-    storageBucket: 'nutrifit-project-2026.firebasestorage.app',
+    apiKey: 'AIzaSyBY12d9MwDvgZDglZNyufg-3chTVQ3wLXM',
+    appId: '1:1079574665614:ios:244d207bc025c1cdc7acdf',
+    messagingSenderId: '1079574665614',
+    projectId: 'nutrifit-database',
+    storageBucket: 'nutrifit-database.firebasestorage.app',
     iosBundleId: 'com.example.nutrifit',
   );
 
   static const FirebaseOptions windows = FirebaseOptions(
-    apiKey: 'AIzaSyDcSMWkEyMn27dpUejeFlaZeibqWhzrRPo',
-    appId: '1:318038496829:web:af7b45d7e4b336c4c03c54',
-    messagingSenderId: '318038496829',
-    projectId: 'nutrifit-project-2026',
-    authDomain: 'nutrifit-project-2026.firebaseapp.com',
-    storageBucket: 'nutrifit-project-2026.firebasestorage.app',
-    measurementId: 'G-6JVF6MWK0X',
+    apiKey: 'AIzaSyBKaE2NuvH8Xsn8AOgO7_fkw6eUI8neUyQ',
+    appId: '1:1079574665614:web:84e8673547d0ce21c7acdf',
+    messagingSenderId: '1079574665614',
+    projectId: 'nutrifit-database',
+    authDomain: 'nutrifit-database.firebaseapp.com',
+    storageBucket: 'nutrifit-database.firebasestorage.app',
+    measurementId: 'G-MRQ1KH17RF',
+  );
+  static const FirebaseOptions android = FirebaseOptions(
+    apiKey: 'AIzaSyA5uUfIrFWE6fGpgQxPnqfVlEhc79JHadM',
+    appId: '1:1079574665614:android:3f481fb9a46d8c25c7acdf',
+    messagingSenderId: '1079574665614',
+    projectId: 'nutrifit-database',
+    storageBucket: 'nutrifit-database.firebasestorage.app',
   );
 }

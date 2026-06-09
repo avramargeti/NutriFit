@@ -34,6 +34,23 @@ service cloud.firestore {
       }
     }
 
+    match /usernames/{usernameId} {
+      allow get: if true;
+      allow list: if false;
+      allow create: if signedIn()
+        && request.resource.data.keys().hasOnly(['uid', 'email', 'username', 'createdAt'])
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.email == request.auth.token.email
+        && request.resource.data.username == usernameId
+        && !exists(/databases/$(database)/documents/usernames/$(usernameId));
+      allow update: if signedIn()
+        && resource.data.uid == request.auth.uid
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.email == request.auth.token.email
+        && request.resource.data.username == usernameId;
+      allow delete: if isAdmin();
+    }
+
     match /ingredients/{ingredientId} {
       allow read: if signedIn();
       allow create, update, delete: if isAdmin();

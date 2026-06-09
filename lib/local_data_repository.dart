@@ -181,7 +181,17 @@ class LocalDataRepository {
       normalizedText,
     );
 
-    // 4. General wellness/nutrition/fitness questions should go to the proxy.
+    // 4. Exhaust local records before allowing the external AI fallback.
+    final localRecordResponse = _answerFromLocalRecords(
+      normalizedText,
+      activeAllergies,
+      asksFitness: asksFitness,
+      asksRecipe: asksRecipe,
+      asksSpecificLocalFoodData: asksSpecificLocalFoodData,
+    );
+    if (localRecordResponse != null) return localRecordResponse;
+
+    // 5. General wellness/nutrition/fitness questions should go to the proxy.
     // Example: "Γιατί η βιταμίνη C κάνει καλό;" or
     // "Δώσε μου συμβουλές αποκατάστασης μετά από προπόνηση".
     // These are not requests for a stored recipe/ingredient/program.
@@ -194,7 +204,7 @@ class LocalDataRepository {
       return null;
     }
 
-    // 5. Fitness questions are checked before recipes so workout/recovery
+    // 6. Fitness questions are checked before recipes so workout/recovery
     // queries do not accidentally match food records.
     if (asksFitness && !asksRecipe) {
       final programResponse = _findFitnessProgram(normalizedText);
@@ -206,7 +216,7 @@ class LocalDataRepository {
       return null;
     }
 
-    // 6. Recipe logic only runs for actual recipe/meal requests.
+    // 7. Recipe logic only runs for actual recipe/meal requests.
     if (asksRecipe) {
       if (_asksForOpenRecipeRecommendation(normalizedText)) {
         final recommendation = _recommendRecipe(
@@ -225,7 +235,7 @@ class LocalDataRepository {
       return null;
     }
 
-    // 7. Ingredient lookup only runs when the user asks for a specific
+    // 8. Ingredient lookup only runs when the user asks for a specific
     // food/ingredient, not for broad educational wellness questions.
     if (asksSpecificLocalFoodData) {
       final ingredientResponse = _findIngredient(
@@ -239,6 +249,76 @@ class LocalDataRepository {
       final fitnessRecommendation = _recommendFitnessProgram(normalizedText);
       if (fitnessRecommendation != null) return fitnessRecommendation;
       return null;
+    }
+
+    return null;
+  }
+
+  String? _answerFromLocalRecords(
+    String normalizedText,
+    List<String> activeAllergies, {
+    required bool asksFitness,
+    required bool asksRecipe,
+    required bool asksSpecificLocalFoodData,
+  }) {
+    final hasRecipeOrMealSignal = _hasRecipeOrMealSignal(normalizedText);
+
+    if (asksFitness && !hasRecipeOrMealSignal) {
+      final programResponse = _findFitnessProgram(normalizedText);
+      if (programResponse != null) return programResponse;
+
+      final recommendation = _recommendFitnessProgram(normalizedText);
+      if (recommendation != null) return recommendation;
+    }
+
+    if (asksRecipe && (!asksFitness || hasRecipeOrMealSignal)) {
+      if (_asksForOpenRecipeRecommendation(normalizedText)) {
+        final recommendation = _recommendRecipe(
+          normalizedText,
+          activeAllergies,
+        );
+        if (recommendation != null) return recommendation;
+      }
+
+      final recipeResponse = _findRecipe(normalizedText, activeAllergies);
+      if (recipeResponse != null) return recipeResponse;
+
+      final recommendation = _recommendRecipe(normalizedText, activeAllergies);
+      if (recommendation != null) return recommendation;
+    }
+
+    if (_looksLikeRecipeLookup(normalizedText)) {
+      final recipeResponse = _findRecipe(
+        normalizedText,
+        activeAllergies,
+        requireStrongMatch: true,
+      );
+      if (recipeResponse != null) return recipeResponse;
+    }
+
+    final ingredientResponse = _findIngredient(
+      normalizedText,
+      activeAllergies,
+      matchCategories: asksSpecificLocalFoodData,
+    );
+    if (ingredientResponse != null) return ingredientResponse;
+
+    final recipeResponse = _findRecipe(
+      normalizedText,
+      activeAllergies,
+      requireStrongMatch: true,
+    );
+    if (recipeResponse != null) return recipeResponse;
+
+    final programResponse = _findFitnessProgram(normalizedText);
+    if (programResponse != null) return programResponse;
+
+    if (asksSpecificLocalFoodData) {
+      final broadIngredientResponse = _findIngredient(
+        normalizedText,
+        activeAllergies,
+      );
+      if (broadIngredientResponse != null) return broadIngredientResponse;
     }
 
     return null;
@@ -462,13 +542,21 @@ class LocalDataRepository {
         "$mealLines$targetText";
   }
 
-  String? _findRecipe(String normalizedText, List<String> activeAllergies) {
+  String? _findRecipe(
+    String normalizedText,
+    List<String> activeAllergies, {
+    bool requireStrongMatch = false,
+  }) {
     final specificWords = _recipeSpecificQueryWords(normalizedText);
     final needsSpecificMatch =
         normalizedText.contains("συνταγ") && specificWords.isNotEmpty;
     final matches = _cache.recipes.where((rec) {
       if (needsSpecificMatch &&
           !_recordContainsAnyQueryWord(rec, specificWords)) {
+        return false;
+      }
+      if (requireStrongMatch &&
+          !_recipeStronglyMatchesQuery(rec, normalizedText)) {
         return false;
       }
       return _recordMatchesQuery(rec, normalizedText, [
@@ -516,8 +604,22 @@ class LocalDataRepository {
       ).compareTo(_mealPlanRecipeScore(a, calorieShare, profile)),
     );
 
-    final topCount = math.min(3, candidates.length);
-    return candidates[_random.nextInt(topCount)];
+    var freshCandidates = candidates
+        .where(
+          (recipe) =>
+              !_recentRecipeRecommendationIds.contains(_recipeId(recipe)),
+        )
+        .toList();
+    if (freshCandidates.isEmpty && candidates.length > 1) {
+      _recentRecipeRecommendationIds.clear();
+      freshCandidates = candidates;
+    }
+
+    final selectable = freshCandidates.isEmpty ? candidates : freshCandidates;
+    final topCount = math.min(3, selectable.length);
+    final selected = selectable[_random.nextInt(topCount)];
+    _rememberRecipeRecommendation(selected);
+    return selected;
   }
 
   int _mealPlanRecipeScore(
@@ -611,12 +713,17 @@ class LocalDataRepository {
         "Υλικά: ${_formatRecipeIngredients(recipe)}";
   }
 
-  String? _findIngredient(String normalizedText, List<String> activeAllergies) {
+  String? _findIngredient(
+    String normalizedText,
+    List<String> activeAllergies, {
+    bool matchCategories = true,
+  }) {
     final matches = _cache.ingredients
         .where(
           (ing) =>
               _ingredientNameMatches(ing, normalizedText) ||
-              (!_asksForNutrition(normalizedText) &&
+              (matchCategories &&
+                  !_asksForNutrition(normalizedText) &&
                   _valueMatchesQuery(ing['category'], normalizedText)),
         )
         .toList();
@@ -993,8 +1100,13 @@ class LocalDataRepository {
         normalizedText.contains("υλικο") ||
         normalizedText.contains("τροφ") ||
         normalizedText.contains("φαγητο") ||
+        normalizedText.contains("ingredient") ||
+        normalizedText.contains("nutrition") ||
+        normalizedText.contains("food") ||
         normalizedText.contains("ανα 100") ||
+        normalizedText.contains("per 100") ||
         normalizedText.contains("γραμμ") ||
+        normalizedText.contains("gram") ||
         normalizedText.contains("g ");
 
     return asksSpecificNutrition || asksIngredient;
@@ -1002,7 +1114,8 @@ class LocalDataRepository {
 
   bool _asksForRecipeRecommendation(String normalizedText) {
     return _asksForOpenRecipeRecommendation(normalizedText) ||
-        normalizedText.contains("συνταγη");
+        normalizedText.contains("συνταγη") ||
+        normalizedText.contains("recipe");
   }
 
   bool _asksForOpenRecipeRecommendation(String normalizedText) {
@@ -1015,15 +1128,61 @@ class LocalDataRepository {
         normalizedText.contains("πρωινο") ||
         normalizedText.contains("μεσημεριανο") ||
         normalizedText.contains("βραδινο") ||
-        normalizedText.contains("σνακ");
+        normalizedText.contains("σνακ") ||
+        normalizedText.contains("recommend") ||
+        normalizedText.contains("suggest") ||
+        normalizedText.contains("suggestion") ||
+        normalizedText.contains("meal") ||
+        normalizedText.contains("breakfast") ||
+        normalizedText.contains("lunch") ||
+        normalizedText.contains("dinner") ||
+        normalizedText.contains("snack");
+  }
+
+  bool _looksLikeRecipeLookup(String normalizedText) {
+    final words = _recipeSpecificQueryWords(
+      normalizedText,
+    ).where((word) => word.length > 2).toList();
+    return words.length >= 2 ||
+        normalizedText.contains("συνταγ") ||
+        normalizedText.contains("recipe") ||
+        normalizedText.contains("μεριδ") ||
+        normalizedText.contains("πιατο") ||
+        normalizedText.contains("dish");
+  }
+
+  bool _hasRecipeOrMealSignal(String normalizedText) {
+    return normalizedText.contains("συνταγ") ||
+        normalizedText.contains("recipe") ||
+        normalizedText.contains("φαω") ||
+        normalizedText.contains("φαγητο") ||
+        normalizedText.contains("γευμα") ||
+        normalizedText.contains("meal") ||
+        normalizedText.contains("πρωινο") ||
+        normalizedText.contains("breakfast") ||
+        normalizedText.contains("μεσημεριανο") ||
+        normalizedText.contains("lunch") ||
+        normalizedText.contains("βραδινο") ||
+        normalizedText.contains("dinner") ||
+        normalizedText.contains("σνακ") ||
+        normalizedText.contains("snack") ||
+        normalizedText.contains("επιδορπιο") ||
+        normalizedText.contains("dessert") ||
+        normalizedText.contains("ροφημα") ||
+        normalizedText.contains("drink");
   }
 
   bool _asksForNutrition(String normalizedText) {
     return normalizedText.contains("θερμιδ") ||
+        normalizedText.contains("calorie") ||
+        normalizedText.contains("calories") ||
         normalizedText.contains("kcal") ||
         normalizedText.contains("πρωτειν") ||
+        normalizedText.contains("protein") ||
         normalizedText.contains("υδατανθρακ") ||
+        normalizedText.contains("carb") ||
         normalizedText.contains("λιπαρ") ||
+        normalizedText.contains("fat") ||
         normalizedText.contains("macro") ||
         normalizedText.contains("μακρο");
   }
@@ -1045,7 +1204,16 @@ class LocalDataRepository {
         normalizedText.contains("μυς") ||
         normalizedText.contains("μυικο") ||
         normalizedText.contains("μυικη") ||
-        normalizedText.contains("ξεκουραση");
+        normalizedText.contains("ξεκουραση") ||
+        normalizedText.contains("gym") ||
+        normalizedText.contains("fitness") ||
+        normalizedText.contains("workout") ||
+        normalizedText.contains("exercise") ||
+        normalizedText.contains("training") ||
+        normalizedText.contains("program") ||
+        normalizedText.contains("cardio") ||
+        normalizedText.contains("strength") ||
+        normalizedText.contains("recovery");
   }
 
   bool _asksForCollectionSummary(String normalizedText) {
@@ -1130,6 +1298,30 @@ class LocalDataRepository {
   ) {
     final text = _normalizeValue(record);
     return words.any((word) => text.contains(word));
+  }
+
+  bool _recipeStronglyMatchesQuery(
+    Map<String, dynamic> recipe,
+    String normalizedText,
+  ) {
+    final words = _recipeSpecificQueryWords(
+      normalizedText,
+    ).where((word) => word.length > 2).toList();
+    if (words.isEmpty) return false;
+
+    final requiredMatches = words.length == 1 ? 1 : 2;
+    final title = _normalizeValue(recipe['title']);
+    final titleMatches = words.where((word) => title.contains(word)).length;
+    if (titleMatches >= requiredMatches) return true;
+
+    final fullText = _normalizeValue({
+      'title': recipe['title'],
+      'categories': recipe['categories'],
+      'tags': recipe['tags'],
+      'ingredients': recipe['ingredients'],
+    });
+    final fullMatches = words.where((word) => fullText.contains(word)).length;
+    return fullMatches >= requiredMatches;
   }
 
   bool _valueMatchesQuery(dynamic value, String normalizedText) {
@@ -1449,14 +1641,29 @@ class LocalDataRepository {
   }
 
   String? _targetMealCategory(String normalizedText) {
-    if (normalizedText.contains("πρωινο") || normalizedText.contains("πρωι")) {
+    if (normalizedText.contains("πρωινο") ||
+        normalizedText.contains("πρωι") ||
+        normalizedText.contains("breakfast")) {
       return "Πρωινό";
     }
-    if (normalizedText.contains("μεσημεριανο")) return "Μεσημεριανό";
-    if (normalizedText.contains("βραδινο")) return "Βραδινό";
-    if (normalizedText.contains("σνακ")) return "Σνακ";
-    if (normalizedText.contains("επιδορπιο")) return "Επιδόρπιο";
-    if (normalizedText.contains("ροφημα")) return "Ροφήματα";
+    if (normalizedText.contains("μεσημεριανο") ||
+        normalizedText.contains("lunch")) {
+      return "Μεσημεριανό";
+    }
+    if (normalizedText.contains("βραδινο") ||
+        normalizedText.contains("dinner")) {
+      return "Βραδινό";
+    }
+    if (normalizedText.contains("σνακ") || normalizedText.contains("snack")) {
+      return "Σνακ";
+    }
+    if (normalizedText.contains("επιδορπιο") ||
+        normalizedText.contains("dessert")) {
+      return "Επιδόρπιο";
+    }
+    if (normalizedText.contains("ροφημα") || normalizedText.contains("drink")) {
+      return "Ροφήματα";
+    }
     return null;
   }
 
@@ -1639,14 +1846,27 @@ class LocalDataRepository {
         ).where((word) => !_genericFitnessQueryWords.contains(word)).toList(),
       );
 
-  List<String> _queryWords(String normalizedText) => _tokenize(normalizedText)
-      .where((word) => word.length > 2 && !_ignoredQueryWords.contains(word))
-      .toList();
+  List<String> _queryWords(String normalizedText) {
+    final words = _tokenize(
+      normalizedText,
+    ).where((word) => word.length > 2 && !_ignoredQueryWords.contains(word));
+    return _expandQueryAliases(words).toList();
+  }
 
   List<String> _tokenize(String normalizedText) => normalizedText
       .split(RegExp(r'[^α-ωa-z0-9]+'))
       .where((word) => word.isNotEmpty)
       .toList();
+
+  Set<String> _expandQueryAliases(Iterable<String> words) {
+    final expanded = <String>{};
+    for (final word in words) {
+      expanded.add(word);
+      final aliases = _queryTermAliases[word];
+      if (aliases != null) expanded.addAll(aliases);
+    }
+    return expanded;
+  }
 
   List<String> _expandFitnessTerms(List<String> words) {
     final expanded = <String>{};
@@ -1688,31 +1908,62 @@ class LocalDataRepository {
     'ποιο',
     'ποιος',
     'τι',
+    'the',
+    'and',
+    'for',
+    'with',
+    'from',
+    'what',
+    'which',
+    'how',
+    'can',
+    'you',
+    'me',
+    'my',
+    'please',
   };
 
   static const Set<String> _genericRecipeQueryWords = {
     'συνταγη',
     'συνταγες',
+    'recipe',
+    'recipes',
     'προτεινε',
     'προταση',
     'προτασεις',
+    'recommend',
+    'suggest',
+    'suggestion',
+    'suggestions',
     'τυχαιο',
     'τυχαια',
     'ιδεα',
     'ιδεες',
+    'idea',
+    'ideas',
     'φαω',
     'φαγητο',
     'γευμα',
+    'food',
+    'meal',
+    'meals',
     'πρωινο',
     'πρωι',
+    'breakfast',
     'μεσημεριανο',
+    'lunch',
     'βραδινο',
+    'dinner',
     'σνακ',
+    'snack',
     'επιδορπιο',
+    'dessert',
     'ροφημα',
+    'drink',
     'γρηγορο',
     'γρηγορη',
     'γρηγορα',
+    'quick',
     'vegan',
     'vegetarian',
     'protein',
@@ -1734,25 +1985,103 @@ class LocalDataRepository {
     'ασκηση',
     'ασκησεις',
     'ασκησεων',
+    'exercise',
+    'exercises',
     'γυμναστικη',
     'γυμναστικης',
+    'gym',
+    'fitness',
     'προπονηση',
     'προπονησεις',
+    'workout',
+    'workouts',
+    'training',
     'προγραμμα',
     'προγραμματα',
+    'program',
+    'programs',
     'θελω',
     'κανω',
     'κανε',
     'δωσε',
     'προτεινε',
     'προταση',
+    'recommend',
+    'suggest',
+    'suggestion',
     'καλο',
     'καλη',
     'σπιτι',
     'γυμναστηριο',
   };
 
+  static const Map<String, List<String>> _queryTermAliases = {
+    'apple': ['μηλο'],
+    'banana': ['μπανανα'],
+    'orange': ['πορτοκαλι'],
+    'pear': ['αχλαδι'],
+    'strawberry': ['φραουλα'],
+    'strawberries': ['φραουλα', 'φραουλες'],
+    'grape': ['σταφυλι'],
+    'grapes': ['σταφυλι', 'σταφυλια'],
+    'chicken': ['κοτοπουλο'],
+    'turkey': ['γαλοπουλα'],
+    'beef': ['μοσχαρι'],
+    'pork': ['χοιρινο'],
+    'lamb': ['αρνι'],
+    'fish': ['ψαρι'],
+    'salmon': ['σολομος'],
+    'tuna': ['τονος'],
+    'shrimp': ['γαριδα', 'γαριδες'],
+    'egg': ['αυγο'],
+    'eggs': ['αυγο', 'αυγα'],
+    'milk': ['γαλα'],
+    'yogurt': ['γιαουρτι'],
+    'yoghurt': ['γιαουρτι'],
+    'cheese': ['τυρι'],
+    'feta': ['φετα'],
+    'oat': ['βρωμη'],
+    'oats': ['βρωμη'],
+    'rice': ['ρυζι'],
+    'pasta': ['μακαρονια'],
+    'spaghetti': ['μακαρονια', 'σπαγγετι'],
+    'potato': ['πατατα'],
+    'potatoes': ['πατατα', 'πατατες'],
+    'tomato': ['ντοματα'],
+    'tomatoes': ['ντοματα', 'ντοματες'],
+    'bread': ['ψωμι'],
+    'avocado': ['αβοκαντο'],
+    'almond': ['αμυγδαλο'],
+    'almonds': ['αμυγδαλο', 'αμυγδαλα'],
+    'peanut': ['φυστικι'],
+    'peanuts': ['φυστικι', 'φυστικια'],
+    'walnut': ['καρυδι'],
+    'walnuts': ['καρυδι', 'καρυδια'],
+    'gym': ['γυμναστηριο', 'γυμναστικη'],
+    'fitness': ['γυμναστικη', 'προπονηση'],
+    'workout': ['προπονηση', 'ασκηση'],
+    'workouts': ['προπονηση', 'ασκησεις'],
+    'exercise': ['ασκηση'],
+    'exercises': ['ασκησεις'],
+    'training': ['προπονηση'],
+    'home': ['σπιτι'],
+    'cardio': ['cardio', 'τρεξιμο'],
+    'strength': ['δυναμη', 'ενδυναμωση', 'βαρη'],
+    'recovery': ['αποκατασταση', 'αναρρωση'],
+  };
+
   static const Map<String, List<String>> _fitnessTermAliases = {
+    'gym': ['γυμναστηριο', 'γυμναστικη', 'βαρη', 'ενδυναμωση'],
+    'fitness': ['γυμναστικη', 'προπονηση', 'ασκηση'],
+    'workout': ['προπονηση', 'ασκηση', 'ενδυναμωση'],
+    'workouts': ['προπονηση', 'ασκησεις', 'ενδυναμωση'],
+    'exercise': ['ασκηση'],
+    'exercises': ['ασκησεις'],
+    'training': ['προπονηση'],
+    'home': ['σπιτι'],
+    'cardio': ['cardio', 'τρεξιμο', 'αεροβιο'],
+    'strength': ['δυναμη', 'ενδυναμωση', 'βαρη'],
+    'recovery': ['αποκατασταση', 'αναρρωση', 'διαταση'],
     'πλατη': [
       'πλατη',
       'ραχη',

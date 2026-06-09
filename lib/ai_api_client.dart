@@ -22,7 +22,7 @@ class AiApiClient {
   );
   static const _projectId = String.fromEnvironment(
     'NUTRIFIT_FIREBASE_PROJECT_ID',
-    defaultValue: 'nutrifit-project-2026',
+    defaultValue: 'nutrifit-database',
   );
   static const _region = String.fromEnvironment(
     'NUTRIFIT_FUNCTIONS_REGION',

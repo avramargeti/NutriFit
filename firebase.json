@@ -3,35 +3,48 @@
     "platforms": {
       "ios": {
         "default": {
-          "projectId": "nutrifit-project-2026",
-          "appId": "1:318038496829:ios:5e6041f0f1825bbcc03c54",
+          "projectId": "nutrifit-database",
+          "appId": "1:1079574665614:ios:244d207bc025c1cdc7acdf",
           "uploadDebugSymbols": false,
           "fileOutput": "ios/Runner/GoogleService-Info.plist"
         }
       },
       "macos": {
         "default": {
-          "projectId": "nutrifit-project-2026",
-          "appId": "1:318038496829:ios:5e6041f0f1825bbcc03c54",
+          "projectId": "nutrifit-database",
+          "appId": "1:1079574665614:ios:244d207bc025c1cdc7acdf",
           "uploadDebugSymbols": false,
           "fileOutput": "macos/Runner/GoogleService-Info.plist"
         }
       },
       "dart": {
         "lib/firebase_options.dart": {
-          "projectId": "nutrifit-project-2026",
+          "projectId": "nutrifit-database",
           "configurations": {
-            "ios": "1:318038496829:ios:5e6041f0f1825bbcc03c54",
-            "macos": "1:318038496829:ios:5e6041f0f1825bbcc03c54",
-            "web": "1:318038496829:web:d36f8af3b9a0b6bbc03c54",
-            "windows": "1:318038496829:web:af7b45d7e4b336c4c03c54"
+            "android": "1:1079574665614:android:3f481fb9a46d8c25c7acdf",
+            "ios": "1:1079574665614:ios:244d207bc025c1cdc7acdf",
+            "macos": "1:1079574665614:ios:244d207bc025c1cdc7acdf",
+            "web": "1:1079574665614:web:0803b8d9bca13e23c7acdf",
+            "windows": "1:1079574665614:web:84e8673547d0ce21c7acdf"
           }
+        }
+      },
+      "android": {
+        "default": {
+          "projectId": "nutrifit-database",
+          "appId": "1:1079574665614:android:3f481fb9a46d8c25c7acdf",
+          "fileOutput": "android/app/google-services.json"
         }
       }
     }
   },
   "firestore": {
     "rules": "firestore.rules"
+  },
+  "auth": {
+    "providers": {
+      "emailPassword": true
+    }
   },
   "functions": [
     {
