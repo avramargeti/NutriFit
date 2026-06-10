@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'local_data_repository.dart';
 
 class BasicFitnessQuiz extends StatefulWidget {
   final VoidCallback onCompleted;
@@ -38,6 +39,7 @@ class _BasicFitnessQuizState extends State<BasicFitnessQuiz> {
             'duration': selectedDuration!,
           }
         }, SetOptions(merge: true));
+        ChatbotDataCache().clearCache();
       }
       
       if (mounted) {
